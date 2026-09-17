@@ -3,57 +3,64 @@ import pandas as pd
 import hashlib
 from datetime import datetime
 
-# Configuração da Página e Padrão Corporativo
+# Configuração da Página
 st.set_page_config(
     page_title="Gestão de Fila Cirúrgica | Hospital Estadual Central",
     page_icon="🏥",
     layout="wide"
 )
 
-# Estilização CSS personalizada para identidade visual corporativa
+# Estilização Avançada com Gradientes Baseados na Identidade Visual da Inova Capixaba e HEC
 st.markdown("""
     <style>
+        /* Gradiente Principal do Cabeçalho Corporativo */
         .main-header {
-            background-color: #0A2540;
-            padding: 20px;
-            border-radius: 8px;
+            background: linear-gradient(135deg, #0A2540 0%, #1E3A8A 50%, #D91A60 100%);
+            padding: 25px;
+            border-radius: 12px;
             color: white;
             text-align: center;
             margin-bottom: 25px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
         .sub-header {
             font-size: 1.1rem;
-            color: #A3BFFA;
+            color: #F1F5F9;
+            margin-top: 5px;
         }
+        /* Botões Estilizados */
         .stButton>button {
-            background-color: #0A2540;
+            background: linear-gradient(135deg, #0A2540 0%, #1E3A8A 100%);
             color: white;
             border-radius: 6px;
             border: none;
             font-weight: bold;
+            padding: 0.5rem 1rem;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
         }
         .stButton>button:hover {
-            background-color: #1E3A8A;
+            background: linear-gradient(135deg, #1E3A8A 0%, #D91A60 100%);
             color: white;
         }
+        /* Caixa de Aviso Institucional */
         .legal-notice {
             background-color: #F8FAFC;
-            border-left: 4px solid #0A2540;
-            padding: 15px;
-            font-size: 0.9rem;
+            border-left: 5px solid #D91A60;
+            padding: 18px;
+            font-size: 0.95rem;
             color: #334155;
-            border-radius: 4px;
+            border-radius: 6px;
             margin-top: 15px;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         }
     </style>
 """, unsafe_allow_html=True)
 
-# Cabeçalho Institucional com Inclusão dos Logotipos Oficiais
+# Cabeçalho Institucional com Logos Oficiais (HEC & Inova Capixaba)
 col_logo1, col_center, col_logo2 = st.columns([1.2, 3.6, 1.2])
 
 with col_logo1:
-    # Substitua pelo arquivo de logo do HEC se houver, ou utilize texto formatado institucional
     st.markdown("### 🏥 **HEC**")
     st.caption("Hospital Estadual Central")
 
@@ -66,19 +73,19 @@ with col_center:
     """, unsafe_allow_html=True)
 
 with col_logo2:
-    # Carregamento da logo oficial da Fundação Inova Capixaba enviada
     try:
-        st.image("logo-inova-cor.jpg", width=160)
+        # Carregamento da logo oficial enviada
+        st.image("logo-inova-cor.jpg", width=170)
     except:
         st.markdown("### 💡 **INOVA CAPIXABA**")
 
-# Função de Criptografia SHA-256 para senhas e dados sensíveis
+# Função de Criptografia SHA-256 para senhas
 def criptografar_dado(texto):
     return hashlib.sha256(texto.encode()).hexdigest()
 
-# Simulação de Leitura das Planilhas no Google Drive (HEC/FILA/fila hec)
+# Simulação de Leitura das Bases no Google Drive (HEC/FILA/fila hec)
 @st.cache_data(ttl=30)
-def carregar_dados_drive():
+def carregar_bases_drive():
     data_fila = {
         "ID_Registro": ["REG-001", "REG-002"],
         "Data_Cadastro_AIH": ["2026-01-15", "2026-02-10"],
@@ -95,17 +102,17 @@ def carregar_dados_drive():
         "Escore_Prioridade": [85.0, 45.0]
     }
     
-    # Planilha de cadastro de gestores (Coluna A: Nome, Coluna B: CPF, Coluna C: E-mail, Coluna D: Senha)
+    # Base de gestores (Background: Coluna A: Nome, Coluna B: CPF, Coluna C: E-mail, Coluna D: Senha)
     data_gestores = {
         "Nome": ["Administrador HEC", "Coordenador Cirúrgico"],
         "CPF": ["000.000.000-00", "111.111.111-11"],
         "Email": ["admin.tecnico@hec.es.gov.br", "coordenacao@hec.es.gov.br"],
-        "Senha": [criptografar_dado("123"), criptografar_dado("123")], # Senha padrão 123 criptografada
+        "Senha": [criptografar_dado("123"), criptografar_dado("123")],
         "Primeiro_Acesso": [True, False]
     }
     return pd.DataFrame(data_fila), pd.DataFrame(data_gestores)
 
-df_fila, df_gestores = carregar_dados_drive()
+df_fila, df_gestores = carregar_bases_drive()
 
 # Ordenação da Fila por Equidade
 if "Escore_Prioridade" in df_fila.columns:
@@ -122,7 +129,7 @@ perfil_escolhido = st.sidebar.selectbox("Selecione o Módulo:", ["Portal do Paci
 if perfil_escolhido == "Portal do Paciente":
     st.subheader("👤 Consulta Individual de Posição na Fila de Espera")
     
-    # Aviso Legal obrigatório posicionado estritamente dentro da área de consulta do paciente
+    # Aviso Legal obrigatório posicionado na tela de consulta do paciente
     st.markdown("""
         <div class='legal-notice'>
             <strong>Aviso Institucional e Transparência do SUS:</strong><br>
@@ -199,7 +206,7 @@ elif perfil_escolhido == "Painel Administrativo (Gestor)":
                         
                         if st.button("Atualizar Senha Definitiva"):
                             if len(nova_senha) >= 6 and nova_senha != "123" and nova_senha == confirma_senha:
-                                st.success("Senha atualizada e criptografada com sucesso na base de dados (Planilha de Cadastro)!")
+                                st.success("Senha atualizada e criptografada com sucesso na base de dados (Drive)!")
                             else:
                                 st.error("A nova senha deve ter no mínimo 6 caracteres, ser diferente da senha padrão e coincidir nos dois campos.")
                     else:
@@ -220,9 +227,14 @@ elif perfil_escolhido == "Painel Administrativo (Gestor)":
                 
     with tab_recuperar:
         st.markdown("#### Recuperação de Senha de Gestor")
-        email_rec = st.text_input("Informe seu e-mail institucional cadastrado (Coluna C):")
+        email_rec = st.text_input("Informe seu e-mail institucional cadastrado:")
         if st.button("Enviar Instruções de Recuperação"):
             if email_rec:
-                st.info("Caso o e-mail conste na planilha de cadastro de gestores (`HEC/FILA/fila hec/cadastro_gestores`), as instruções seguras de redefinição de senha foram disparadas para o endereço informado.")
+                # Verificação oculta em background na coluna C da base de gestores
+                email_encontrado = not df_gestores[df_gestores["Email"].str.strip().str.lower() == email_rec.strip().lower()].empty
+                if email_encontrado:
+                    st.success("Instruções de redefinição de senha enviadas com segurança para o e-mail corporativo cadastrado.")
+                else:
+                    st.error("O e-mail informado não consta na base de dados autorizada.")
             else:
                 st.warning("Insira um e-mail corporativo válido.")
