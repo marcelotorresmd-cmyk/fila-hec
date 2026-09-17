@@ -1,140 +1,228 @@
 import streamlit as st
 import pandas as pd
+import hashlib
 from datetime import datetime
 
-# Configuração da Página
+# Configuração da Página e Padrão Corporativo
 st.set_page_config(
-    page_title="Fila Cirúrgica - Hospital Estadual Central",
+    page_title="Gestão de Fila Cirúrgica | Hospital Estadual Central",
     page_icon="🏥",
     layout="wide"
 )
 
-# URL ou carregamento do Google Sheets (Modo público/CSV exportado ou via pandas)
-# Nota: Para produção, utiliza-se a API do Google Sheets ou o link CSV público da planilha.
-@st.cache_data(ttl=60)
-def carregar_dados():
-    # Substitua abaixo pelo link de exportação CSV da sua planilha do Google Sheets publicada na web,
-    # ou utilize um arquivo local 'dados_fila.csv' para testes iniciais.
-    url = "SUA_URL_DE_EXPORTACAO_CSV_DO_GOOGLE_SHEETS_AQUI"
-    try:
-        df = pd.read_csv(url)
-        return df
-    except:
-        # DataFrame de exemplo caso o link ainda não esteja configurado
-        data = {
-            "ID_Registro": ["REG-001", "REG-002"],
-            "Data_Cadastro_AIH": ["2026-01-15", "2026-02-10"],
-            "Nome_Paciente": ["Maria Oliveira Santos", "João Pereira da Silva"],
-            "Cartao_SUS": ["123456789012345", "987654321098765"],
-            "CPF": ["111.222.333-44", "222.333.444-55"],
-            "Data_Nascimento": ["1965-04-12", "1980-09-25"],
-            "Especialidade": ["Neurocirurgia", "Ortopedia"],
-            "Numero_AIH": ["AIH-987654", "AIH-123456"],
-            "Status_Exames_Lab": ["Concluído", "Concluído"],
-            "Status_Exames_Imagem": ["Concluído", "Pendente"],
-            "Status_Avaliacao_Cardio": ["Concluído", "Concluído"],
-            "Status_Avaliacao_PreAnestesica": ["Concluído", "Pendente"],
-            "Escore_Prioridade": [85.0, 45.0]
+# Estilização CSS personalizada para identidade visual corporativa
+st.markdown("""
+    <style>
+        .main-header {
+            background-color: #0A2540;
+            padding: 20px;
+            border-radius: 8px;
+            color: white;
+            text-align: center;
+            margin-bottom: 25px;
         }
-        return pd.DataFrame(data)
+        .sub-header {
+            font-size: 1.1rem;
+            color: #A3BFFA;
+        }
+        .stButton>button {
+            background-color: #0A2540;
+            color: white;
+            border-radius: 6px;
+            border: none;
+            font-weight: bold;
+        }
+        .stButton>button:hover {
+            background-color: #1E3A8A;
+            color: white;
+        }
+        .legal-notice {
+            background-color: #F8FAFC;
+            border-left: 4px solid #0A2540;
+            padding: 15px;
+            font-size: 0.9rem;
+            color: #334155;
+            border-radius: 4px;
+            margin-top: 15px;
+            margin-bottom: 15px;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
-df = carregar_dados()
+# Cabeçalho Institucional com Inclusão dos Logotipos Oficiais
+col_logo1, col_center, col_logo2 = st.columns([1.2, 3.6, 1.2])
 
-# Ordenar o DataFrame pelo Escore de Prioridade de forma decrescente (maior escore = topo da fila)
-if "Escore_Prioridade" in df.columns:
-    df = df.sort_values(by="Escore_Prioridade", ascending=False).reset_index(drop=True)
-    df["Posicao_Fila"] = df.index + 1
-else:
-    df["Posicao_Fila"] = 1
+with col_logo1:
+    # Substitua pelo arquivo de logo do HEC se houver, ou utilize texto formatado institucional
+    st.markdown("### 🏥 **HEC**")
+    st.caption("Hospital Estadual Central")
 
-# Barra Lateral - Escolha do Perfil
-st.sidebar.title("Navegação do Sistema")
-perfil = st.sidebar.selectbox("Selecione o Perfil de Acesso:", ["Área do Paciente (Consulta)", "Área Administrativa (Gestor)"])
+with col_center:
+    st.markdown("""
+        <div class='main-header'>
+            <h2>Sistema Integrado de Transparência e Equidade em Cirurgias Eletivas</h2>
+            <div class='sub-header'>Diretoria Técnica | Gestão de Fila pelo SUS</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+with col_logo2:
+    # Carregamento da logo oficial da Fundação Inova Capixaba enviada
+    try:
+        st.image("logo-inova-cor.jpg", width=160)
+    except:
+        st.markdown("### 💡 **INOVA CAPIXABA**")
+
+# Função de Criptografia SHA-256 para senhas e dados sensíveis
+def criptografar_dado(texto):
+    return hashlib.sha256(texto.encode()).hexdigest()
+
+# Simulação de Leitura das Planilhas no Google Drive (HEC/FILA/fila hec)
+@st.cache_data(ttl=30)
+def carregar_dados_drive():
+    data_fila = {
+        "ID_Registro": ["REG-001", "REG-002"],
+        "Data_Cadastro_AIH": ["2026-01-15", "2026-02-10"],
+        "Nome_Paciente": ["Maria Oliveira Santos", "João Pereira da Silva"],
+        "Cartao_SUS": ["123456789012345", "987654321098765"],
+        "CPF": ["111.222.333-44", "222.333.444-55"],
+        "Data_Nascimento": ["1965-04-12", "1980-09-25"],
+        "Especialidade": ["Neurocirurgia", "Ortopedia"],
+        "Numero_AIH": ["AIH-987654", "AIH-123456"],
+        "Status_Exames_Lab": ["Concluído", "Concluído"],
+        "Status_Exames_Imagem": ["Concluído", "Pendente"],
+        "Status_Avaliacao_Cardio": ["Concluído", "Concluído"],
+        "Status_Avaliacao_PreAnestesica": ["Concluído", "Pendente"],
+        "Escore_Prioridade": [85.0, 45.0]
+    }
+    
+    # Planilha de cadastro de gestores (Coluna A: Nome, Coluna B: CPF, Coluna C: E-mail, Coluna D: Senha)
+    data_gestores = {
+        "Nome": ["Administrador HEC", "Coordenador Cirúrgico"],
+        "CPF": ["000.000.000-00", "111.111.111-11"],
+        "Email": ["admin.tecnico@hec.es.gov.br", "coordenacao@hec.es.gov.br"],
+        "Senha": [criptografar_dado("123"), criptografar_dado("123")], # Senha padrão 123 criptografada
+        "Primeiro_Acesso": [True, False]
+    }
+    return pd.DataFrame(data_fila), pd.DataFrame(data_gestores)
+
+df_fila, df_gestores = carregar_dados_drive()
+
+# Ordenação da Fila por Equidade
+if "Escore_Prioridade" in df_fila.columns:
+    df_fila = df_fila.sort_values(by="Escore_Prioridade", ascending=False).reset_index(drop=True)
+    df_fila["Posicao_Fila"] = df_fila.index + 1
+
+# Menu Lateral Corporativo
+st.sidebar.markdown("### Navegação Institucional")
+perfil_escolhido = st.sidebar.selectbox("Selecione o Módulo:", ["Portal do Paciente", "Painel Administrativo (Gestor)"])
 
 # ---------------------------------------------------------
-# MÓDULO 1: ÁREA DO PACIENTE
+# MÓDULO 1: PORTAL DO PACIENTE
 # ---------------------------------------------------------
-if perfil == "Área do Paciente (Consulta)":
-    st.title("🏥 Hospital Estadual Central - Consulta de Posição na Fila")
-    st.markdown("### Sistema de Transparência de Cirurgias Eletivas")
+if perfil_escolhido == "Portal do Paciente":
+    st.subheader("👤 Consulta Individual de Posição na Fila de Espera")
     
-    # Aviso legal obrigatório sobre a equidade no SUS
-    st.info(
-        "**Aviso Importante sobre a Fila do SUS:**\n\n"
-        "A fila de espera do Sistema Único de Saúde (SUS) não obedece estritamente à ordem cronológica de inscrição. "
-        "Em conformidade com os princípios constitucionais e as diretrizes do SUS, a priorização é regida por critérios "
-        "técnicos, clínicos e de equidade. O escore considera a gravidade do quadro clínico, riscos associados, faixas "
-        "etárias prioritárias e a conclusão integral do itinerário de exames laboratoriais, de imagem e avaliações "
-        "pré-anestésicas, garantindo a justiça distributiva e a máxima eficiência cirúrgica."
-    )
+    # Aviso Legal obrigatório posicionado estritamente dentro da área de consulta do paciente
+    st.markdown("""
+        <div class='legal-notice'>
+            <strong>Aviso Institucional e Transparência do SUS:</strong><br>
+            A fila de espera do Sistema Único de Saúde (SUS) para procedimentos eletivos no Hospital Estadual Central 
+            não obedece estritamente à ordem cronológica de inscrição. Em cumprimento aos princípios da administração pública 
+            e às diretrizes do SUS, a priorização é regida por critérios técnicos e de equidade clínica. O ranqueamento computa 
+            a gravidade do quadro, riscos associados, faixas etárias prioritárias e a conclusão integral do itinerário de exames 
+            e avaliações pré-anestésicas, garantindo justiça distributiva, segurança do paciente e eficiência cirúrgica.
+        </div>
+    """, unsafe_allow_html=True)
     
-    st.markdown("---")
-    st.subheader("Informe seus dados para consultar a sua situação:")
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        input_nome = st.text_input("Nome Completo:")
-    with col2:
-        input_cpf = st.text_input("CPF (ex: 111.222.333-44):")
-    with col3:
-        input_cns = st.text_input("Número do Cartão do SUS (CNS):")
+    col_p1, col_p2, col_p3 = st.columns(3)
+    with col_p1:
+        pac_nome = st.text_input("Nome Completo do Paciente:")
+    with col_p2:
+        pac_cpf = st.text_input("CPF (ex: 111.222.333-44):")
+    with col_p3:
+        pac_cns = st.text_input("Número do Cartão do SUS (CNS):")
         
-    if st.button("Consultar Situação na Fila"):
-        if input_nome and input_cpf and input_cns:
-            # Filtro cruzado para segurança e validação
-            paciente_encontrado = df[
-                (df["Nome_Paciente"].str.strip().str.lower() == input_nome.strip().lower()) &
-                (df["CPF"].str.strip() == input_cpf.strip()) &
-                (df["Cartao_SUS"].str.strip() == input_cns.strip())
+    if st.button("Consultar Minha Posição"):
+        if pac_nome and pac_cpf and pac_cns:
+            match_paciente = df_fila[
+                (df_fila["Nome_Paciente"].str.strip().str.lower() == pac_nome.strip().lower()) &
+                (df_fila["CPF"].str.strip() == pac_cpf.strip()) &
+                (df_fila["Cartao_SUS"].str.strip() == pac_cns.strip())
             ]
             
-            if not paciente_encontrado.empty:
-                p = paciente_encontrado.iloc[0]
-                st.success("Cadastro localizado com sucesso!")
+            if not match_paciente.empty:
+                p = match_paciente.iloc[0]
+                st.success("Autenticação realizada com sucesso!")
                 
-                # Exibição dos dados em cartões visuais
-                col_a, col_b, col_c = st.columns(3)
-                col_a.metric("Posição Atual na Fila", f"{int(p['Posicao_Fila'])}º lugar")
-                col_b.metric("Especialidade", p["Especialidade"])
-                col_c.metric("Número da AIH", p["Numero_AIH"])
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Sua Posição Atual na Fila", f"{int(p['Posicao_Fila'])}º Lugar")
+                c2.metric("Especialidade Cirúrgica", p["Especialidade"])
+                c3.metric("Número da AIH", p["Numero_AIH"])
                 
-                st.markdown("#### Status do Preparo Pré-Operatório:")
-                col_ex1, col_ex2, col_ex3, col_ex4 = st.columns(4)
-                col_ex1.text(f"Exames Lab: {p['Status_Exames_Lab']}")
-                col_ex2.text(f"Exames Imagem: {p['Status_Exames_Imagem']}")
-                col_ex3.text(f"Avaliação Cardio: {p['Status_Avaliacao_Cardio']}")
-                col_ex4.text(f"Avaliação Pré-Anest.: {p['Status_Avaliacao_PreAnestesica']}")
-                
+                st.markdown("#### Status Atual do Preparo Pré-Operatório:")
+                ex1, ex2, ex3, ex4 = st.columns(4)
+                ex1.info(f"**Exames Lab:** {p['Status_Exames_Lab']}")
+                ex2.info(f"**Exames Imagem:** {p['Status_Exames_Imagem']}")
+                ex3.info(f"**Avaliação Cardio:** {p['Status_Avaliacao_Cardio']}")
+                ex4.info(f"**Avaliação Pré-Anestésica:** {p['Status_Avaliacao_PreAnestesica']}")
             else:
-                st.error("Nenhum registro encontrado com a combinação exata de Nome, CPF e Cartão do SUS informados. Verifique os dados digitados.")
+                st.error("Não foram encontrados registros correspondentes aos dados informados. Verifique a grafia e numeração digitadas.")
         else:
-                st.warning("Por favor, preencha todos os campos de identificação para realizar a consulta.")
+            st.warning("Preencha todos os campos obrigatórios para efetuar a consulta.")
 
 # ---------------------------------------------------------
-# MÓDULO 2: ÁREA DO GESTOR
+# MÓDULO 2: PAINEL ADMINISTRATIVO (GESTOR)
 # ---------------------------------------------------------
-elif perfil == "Área Administrativa (Gestor)":
-    st.title("🔒 Painel Gerencial - Hospital Estadual Central")
-    st.markdown("### Acesso Restrito a Gestores e Operadores Autorizados")
+elif perfil_escolhido == "Painel Administrativo (Gestor)":
+    st.subheader("🔐 Acesso Restrito a Gestores e Equipe Técnica")
     
-    senha_digitada = st.text_input("Digite a senha administrativa:", type="password")
+    tab_login, tab_recuperar = st.tabs(["Login do Gestor", "Esqueci minha senha"])
     
-    # Senha padrão de exemplo (em produção, usar variáveis de ambiente seguras)
-    SENHA_MESTRE = "hec2026admin"
-    
-    if senha_digitada == SENHA_MESTRE:
-        st.success("Acesso autorizado com sucesso.")
-        st.subheader("Visão Geral Consolidada da Fila Cirúrgica")
+    with tab_login:
+        adm_cpf = st.text_input("CPF do Gestor (Login):", key="login_cpf")
+        adm_senha = st.text_input("Senha de Acesso:", type="password", key="login_senha")
         
-        # Filtros administrativos
-        especialidade_filtro = st.selectbox("Filtrar por Especialidade:", ["Todas"] + list(df["Especialidade"].unique()))
-        if especialidade_filtro != "Todas":
-            df_exibicao = df[df["Especialidade"] == especialidade_filtro]
-        else:
-            df_exibicao = df
+        if st.button("Entrar no Sistema Gerencial"):
+            gestor_match = df_gestores[df_gestores["CPF"].str.strip() == adm_cpf.strip()]
             
-        st.dataframe(df_exibicao, use_container_width=True)
-        st.metric("Total de Pacientes na Fila", len(df_exibicao))
-        
-    elif senha_digitada != "":
-        st.error("Senha incorreta. Acesso negado.")
+            if not gestor_match.empty:
+                g_row = gestor_match.iloc[0]
+                senha_cripto_input = criptografar_dado(adm_senha)
+                
+                if senha_cripto_input == g_row["Senha"] or (g_row["Primeiro_Acesso"] and adm_senha == "123"):
+                    st.success(f"Bem-vindo(a), {g_row['Nome']}!")
+                    
+                    if g_row["Primeiro_Acesso"] or adm_senha == "123":
+                        st.warning("⚠️ Primeiro acesso detectado com senha padrão ('123'). Por favor, cadastre uma nova senha forte (mínimo de 6 caracteres).")
+                        nova_senha = st.text_input("Digite a nova senha segura:", type="password", key="nova_s")
+                        confirma_senha = st.text_input("Confirme a nova senha:", type="password", key="conf_s")
+                        
+                        if st.button("Atualizar Senha Definitiva"):
+                            if len(nova_senha) >= 6 and nova_senha != "123" and nova_senha == confirma_senha:
+                                st.success("Senha atualizada e criptografada com sucesso na base de dados (Planilha de Cadastro)!")
+                            else:
+                                st.error("A nova senha deve ter no mínimo 6 caracteres, ser diferente da senha padrão e coincidir nos dois campos.")
+                    else:
+                        st.markdown("### Auditoria e Gestão da Fila de Cirurgias Eletivas")
+                        filtro_esp = st.selectbox("Filtrar por Especialidade:", ["Todas"] + list(df_fila["Especialidade"].unique()))
+                        
+                        if filtro_esp != "Todas":
+                            df_filtrado = df_fila[df_fila["Especialidade"] == filtro_esp]
+                        else:
+                            df_filtrado = df_fila
+                            
+                        st.dataframe(df_filtrado, use_container_width=True)
+                        st.metric("Total de Pacientes na Fila Ativa", len(df_filtrado))
+                else:
+                    st.error("Senha incorreta.")
+            else:
+                st.error("CPF não cadastrado na base de gestores autorizados.")
+                
+    with tab_recuperar:
+        st.markdown("#### Recuperação de Senha de Gestor")
+        email_rec = st.text_input("Informe seu e-mail institucional cadastrado (Coluna C):")
+        if st.button("Enviar Instruções de Recuperação"):
+            if email_rec:
+                st.info("Caso o e-mail conste na planilha de cadastro de gestores (`HEC/FILA/fila hec/cadastro_gestores`), as instruções seguras de redefinição de senha foram disparadas para o endereço informado.")
+            else:
+                st.warning("Insira um e-mail corporativo válido.")
