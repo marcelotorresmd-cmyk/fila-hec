@@ -1,64 +1,104 @@
 import streamlit as st
 import pandas as pd
 import hashlib
-from datetime import datetime
 
 # Configuração da Página
 st.set_page_config(
-    page_title="Gestão de Fila Cirúrgica | Hospital Estadual Central",
+    page_title="Gestão de Fila Cirúrgica | HEC & Inova Capixaba",
     page_icon="🏥",
     layout="wide"
 )
 
-# Estilização Corporativa Avançada com Gradientes Baseados na Identidade Visual da Inova Capixaba e HEC
+# Estilização Avançada de Alto Padrão (UI/UX - Web Design Corporativo Executivo)
 st.markdown("""
     <style>
+        /* Paleta de Cores e Fundo Gradiente Executivo Baseado na Inova Capixaba e HEC */
         .stApp {
-            background: linear-gradient(180deg, #F8FAFC 0%, #EEF2F6 100%);
+            background: linear-gradient(135deg, #07192A 0%, #0A2540 40%, #1B2A4A 100%);
+            color: #E2E8F0;
         }
+        /* Cabeçalho Corporativo de Luxo */
         .main-header {
-            background: linear-gradient(135deg, #0A2540 0%, #1E3A8A 55%, #D91A60 100%);
-            padding: 25px;
-            border-radius: 12px;
+            background: linear-gradient(135deg, #0A2540 0%, #1E3A8A 50%, #D91A60 100%);
+            padding: 30px;
+            border-radius: 16px;
             color: white;
             text-align: center;
             margin-bottom: 25px;
-            box-shadow: 0 4px 20px rgba(10, 37, 64, 0.15);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .main-title {
+            font-size: 2rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            margin-bottom: 5px;
         }
         .sub-header {
-            font-size: 1.1rem;
+            font-size: 1.15rem;
             color: #F1F5F9;
-            margin-top: 5px;
-            font-weight: 300;
+            font-weight: 400;
         }
+        /* Cartões de Conteúdo e Vidro Corporativo (Glassmorphism sutil) */
+        .card-container {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 25px;
+            border-radius: 14px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            margin-bottom: 20px;
+        }
+        /* Botões Executivos */
         .stButton>button {
-            background: linear-gradient(135deg, #0A2540 0%, #1E3A8A 100%);
+            background: linear-gradient(135deg, #D91A60 0%, #9B1141 100%);
             color: white;
-            border-radius: 6px;
+            border-radius: 8px;
             border: none;
-            font-weight: bold;
-            padding: 0.5rem 1rem;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            font-weight: 700;
+            padding: 0.6rem 1.2rem;
+            box-shadow: 0 4px 15px rgba(217, 26, 96, 0.4);
+            transition: all 0.3s ease;
         }
         .stButton>button:hover {
-            background: linear-gradient(135deg, #1E3A8A 0%, #D91A60 100%);
-            color: white;
+            background: linear-gradient(135deg, #E63973 0%, #B81D53 100%);
+            box-shadow: 0 6px 20px rgba(217, 26, 96, 0.6);
+            transform: translateY(-1px);
         }
+        /* Aviso Institucional */
         .legal-notice {
-            background-color: #FFFFFF;
-            border-left: 5px solid #D91A60;
-            padding: 18px;
+            background: rgba(30, 41, 59, 0.9);
+            border-left: 6px solid #D91A60;
+            padding: 20px;
             font-size: 0.95rem;
-            color: #334155;
-            border-radius: 6px;
+            color: #F8FAFC;
+            border-radius: 8px;
             margin-top: 15px;
             margin-bottom: 20px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            border-top: 1px solid rgba(255,255,255,0.05);
+        }
+        /* Rodapé de Versão */
+        .version-badge {
+            position: fixed;
+            bottom: 10px;
+            right: 15px;
+            background: rgba(15, 23, 42, 0.85);
+            color: #94A3B8;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 9999;
+            backdrop-filter: blur(5px);
         }
     </style>
 """, unsafe_allow_html=True)
 
-# Cabeçalho Institucional com Logos Oficiais
+# Exibição da Versão do Sistema no Rodapé
+st.markdown("<div class='version-badge'>Versão 2.1.0-PRO | HEC & Inova</div>", unsafe_allow_html=True)
+
+# Cabeçalho Institucional com Logotipo Oficial e Design de Luxo
 col_logo1, col_center, col_logo2 = st.columns([1.2, 3.6, 1.2])
 
 with col_logo1:
@@ -68,8 +108,8 @@ with col_logo1:
 with col_center:
     st.markdown("""
         <div class='main-header'>
-            <h2>Sistema Integrado de Transparência e Equidade em Cirurgias Eletivas</h2>
-            <div class='sub-header'>Diretoria Técnica | Gestão de Fila pelo SUS</div>
+            <div class='main-title'>Sistema Integrado de Transparência e Equidade</div>
+            <div class='sub-header'>Diretoria Técnica | Gestão de Fila Cirúrgica Eletiva (SUS)</div>
         </div>
     """, unsafe_allow_html=True)
 
@@ -79,16 +119,21 @@ with col_logo2:
     except:
         st.markdown("### 💡 **INOVA CAPIXABA**")
 
-# Função de Criptografia SHA-256 para senhas
+# Funções de Criptografia e Padronização de CPF
 def criptografar_dado(texto):
     return hashlib.sha256(str(texto).encode()).hexdigest()
 
-# Função de normalização rigorosa de CPF (Garante 11 dígitos com zero à esquerda se necessário)
 def padronizar_cpf(cpf_str):
     apenas_digitos = "".join(filter(str.isdigit, str(cpf_str)))
     return apenas_digitos.zfill(11)
 
-# Leitura da Base de Fila e da Planilha de Cadastro de Gestores (Cadastro.xlsx)
+# Inicialização de Estados de Sessão para Persistência de Senhas e Alterações
+if "senhas_customizadas" not in st.session_state:
+    st.session_state.senhas_customizadas = {}  # Mapeia CPF -> Hash da nova senha
+if "primeiro_acesso_feito" not in st.session_state:
+    st.session_state.primeiro_acesso_feito = set()  # CPFs que já concluíram a troca de senha
+
+# Leitura da Base de Fila e Gestores (Cadastro.xlsx)
 @st.cache_data(ttl=30)
 def carregar_bases():
     data_fila = {
@@ -134,14 +179,15 @@ if "Escore_Prioridade" in df_fila.columns:
     df_fila = df_fila.sort_values(by="Escore_Prioridade", ascending=False).reset_index(drop=True)
     df_fila["Posicao_Fila"] = df_fila.index + 1
 
-st.sidebar.markdown("### Navegação Institucional")
+# Menu Lateral Executivo
+st.sidebar.markdown("### 🧭 Navegação Institucional")
 perfil_escolhido = st.sidebar.selectbox("Selecione o Módulo:", ["Portal do Paciente", "Painel Administrativo (Gestor)"])
 
 # ---------------------------------------------------------
 # MÓDULO 1: PORTAL DO PACIENTE
 # ---------------------------------------------------------
 if perfil_escolhido == "Portal do Paciente":
-    st.subheader("👤 Consulta Individual de Posição na Fila de Espera")
+    st.markdown("### 👤 Consulta Individual de Posição na Fila de Espera")
     
     st.markdown("""
         <div class='legal-notice'>
@@ -194,13 +240,13 @@ if perfil_escolhido == "Portal do Paciente":
 # MÓDULO 2: PAINEL ADMINISTRATIVO (GESTOR)
 # ---------------------------------------------------------
 elif perfil_escolhido == "Painel Administrativo (Gestor)":
-    st.subheader("🔐 Acesso Restrito a Gestores e Equipe Técnica")
+    st.markdown("### 🔐 Acesso Restrito a Gestores e Equipe Técnica")
     
     tab_login, tab_recuperar = st.tabs(["Login do Gestor", "Esqueci minha senha"])
     
     with tab_login:
         adm_cpf = st.text_input("CPF do Gestor (Login):", key="login_cpf")
-        adm_senha = st.text_input("Senha de Acesso (Senha padrão inicial: 123):", type="password", key="login_senha")
+        adm_senha = st.text_input("Senha de Acesso:", type="password", key="login_senha")
         
         if st.button("Entrar no Sistema Gerencial"):
             adm_cpf_normalizado = padronizar_cpf(adm_cpf)
@@ -208,23 +254,37 @@ elif perfil_escolhido == "Painel Administrativo (Gestor)":
             
             if not gestor_match.empty:
                 g_row = gestor_match.iloc[0]
+                cpf_key = g_row["CPF"]
+                
+                # Verifica se já existe uma senha personalizada em sessão
+                senha_cadastrada = st.session_state.senhas_customizadas.get(cpf_key, g_row["Senha"])
+                primeiro_acesso_pendente = (cpf_key not in st.session_state.primeiro_acesso_feito) and (g_row["Primeiro_Acesso"] or adm_senha == "123")
+                
                 senha_cripto_input = criptografar_dado(adm_senha)
                 
-                if senha_cripto_input == g_row["Senha"] or adm_senha == "123":
+                if senha_cripto_input == senha_cadastrada or (primeiro_acesso_pendente and adm_senha == "123"):
                     st.success(f"Bem-vindo(a), {g_row['Nome']}!")
                     
-                    if adm_senha == "123" or g_row["Primeiro_Acesso"]:
+                    if primeiro_acesso_pendente or adm_senha == "123":
                         st.warning("⚠️ Primeiro acesso detectado com a senha padrão **123**. Por favor, cadastre uma nova senha forte (mínimo de 6 caracteres).")
-                        nova_senha = st.text_input("Digite a nova senha segura:", type="password", key="nova_s")
-                        confirma_senha = st.text_input("Confirme a nova senha:", type="password", key="conf_s")
                         
-                        if st.button("Atualizar Senha Definitiva"):
-                            if len(nova_senha) >= 6 and nova_senha != "123" and nova_senha == confirma_senha:
-                                st.success("Senha atualizada e criptografada com sucesso na base de dados!")
-                            else:
-                                st.error("A nova senha deve ter no mínimo 6 caracteres, ser diferente da senha padrão ('123') e coincidir nos dois campos.")
+                        with st.form("form_nova_senha"):
+                            nova_senha = st.text_input("Digite a nova senha segura:", type="password")
+                            confirma_senha = st.text_input("Confirme a nova senha:", type="password")
+                            btn_atualizar = st.form_submit_button("Atualizar Senha Definitiva")
+                            
+                            if btn_atualizar:
+                                if len(nova_senha) >= 6 and nova_senha != "123" and nova_senha == confirma_senha:
+                                    # Salva permanentemente na sessão o novo hash da senha e marca como concluído
+                                    st.session_state.senhas_customizadas[cpf_key] = criptografar_dado(nova_senha)
+                                    st.session_state.primeiro_acesso_feito.add(cpf_key)
+                                    st.success("✅ Senha atualizada e criptografada com sucesso! Faça login novamente com sua nova senha.")
+                                    st.rerun()
+                                else:
+                                    st.error("A nova senha deve ter no mínimo 6 caracteres, ser diferente da senha padrão ('123') e coincidir nos dois campos.")
                     else:
-                        st.markdown("### Auditoria e Gestão da Fila de Cirurgias Eletivas")
+                        st.markdown("---")
+                        st.markdown("### 📊 Painel de Auditoria e Gestão Cirúrgica")
                         filtro_esp = st.selectbox("Filtrar por Especialidade:", ["Todas"] + list(df_fila["Especialidade"].unique()))
                         
                         if filtro_esp != "Todas":
