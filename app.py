@@ -13,11 +13,9 @@ st.set_page_config(
 # Estilização Corporativa Avançada com Gradientes Baseados na Identidade Visual da Inova Capixaba e HEC
 st.markdown("""
     <style>
-        /* Fundo Geral da Aplicação */
         .stApp {
             background: linear-gradient(180deg, #F8FAFC 0%, #EEF2F6 100%);
         }
-        /* Cabeçalho Corporativo com Gradiente Institucional */
         .main-header {
             background: linear-gradient(135deg, #0A2540 0%, #1E3A8A 55%, #D91A60 100%);
             padding: 25px;
@@ -33,7 +31,6 @@ st.markdown("""
             margin-top: 5px;
             font-weight: 300;
         }
-        /* Botões Estilizados */
         .stButton>button {
             background: linear-gradient(135deg, #0A2540 0%, #1E3A8A 100%);
             color: white;
@@ -47,7 +44,6 @@ st.markdown("""
             background: linear-gradient(135deg, #1E3A8A 0%, #D91A60 100%);
             color: white;
         }
-        /* Caixa de Aviso Institucional */
         .legal-notice {
             background-color: #FFFFFF;
             border-left: 5px solid #D91A60;
@@ -79,7 +75,6 @@ with col_center:
 
 with col_logo2:
     try:
-        # Carregamento da logo oficial enviada
         st.image("logo-inova-cor_2.jpg", width=170)
     except:
         st.markdown("### 💡 **INOVA CAPIXABA**")
@@ -88,10 +83,14 @@ with col_logo2:
 def criptografar_dado(texto):
     return hashlib.sha256(str(texto).encode()).hexdigest()
 
-# Leitura da Base de Fila e da Planilha de Cadastro de Gestores enviada (Cadastro.xlsx)
+# Função de normalização rigorosa de CPF (Garante 11 dígitos com zero à esquerda se necessário)
+def padronizar_cpf(cpf_str):
+    apenas_digitos = "".join(filter(str.isdigit, str(cpf_str)))
+    return apenas_digitos.zfill(11)
+
+# Leitura da Base de Fila e da Planilha de Cadastro de Gestores (Cadastro.xlsx)
 @st.cache_data(ttl=30)
 def carregar_bases():
-    # Base de Fila de Exemplo / Integração
     data_fila = {
         "ID_Registro": ["REG-001", "REG-002"],
         "Data_Cadastro_AIH": ["2026-01-15", "2026-02-10"],
@@ -109,23 +108,19 @@ def carregar_bases():
     }
     df_f = pd.DataFrame(data_fila)
     
-    # Leitura da planilha de cadastro enviada (Cadastro.xlsx)
     try:
         df_cad = pd.read_excel("Cadastro.xlsx", header=None)
-        # Mapeamento estrito estruturado: Coluna 0 (A)=Nome, Coluna 1 (B)=CPF, Coluna 2 (C)=E-mail
         df_gestores = pd.DataFrame({
             "Nome": df_cad[0].astype(str).str.strip(),
-            "CPF": df_cad[1].astype(str).str.strip(),
+            "CPF": df_cad[1].apply(padronizar_cpf),
             "Email": df_cad[2].astype(str).str.strip(),
-            # Atribui a senha padrão criptografada '123' caso não haja coluna D na planilha
             "Senha": [criptografar_dado("123")] * len(df_cad),
             "Primeiro_Acesso": [True] * len(df_cad)
         })
     except Exception as e:
-        # Fallback de segurança caso o arquivo não esteja no diretório no momento do teste
         df_gestores = pd.DataFrame({
             "Nome": ["Dr. Marcelo Torres"],
-            "CPF": ["9021165767"],
+            "CPF": [padronizar_cpf("09021165767")],
             "Email": ["marcelotorres.md@gmail.com"],
             "Senha": [criptografar_dado("123")],
             "Primeiro_Acesso": [True]
@@ -135,12 +130,10 @@ def carregar_bases():
 
 df_fila, df_gestores = carregar_bases()
 
-# Ordenação da Fila por Equidade
 if "Escore_Prioridade" in df_fila.columns:
     df_fila = df_fila.sort_values(by="Escore_Prioridade", ascending=False).reset_index(drop=True)
     df_fila["Posicao_Fila"] = df_fila.index + 1
 
-# Menu Lateral Corporativo
 st.sidebar.markdown("### Navegação Institucional")
 perfil_escolhido = st.sidebar.selectbox("Selecione o Módulo:", ["Portal do Paciente", "Painel Administrativo (Gestor)"])
 
@@ -210,11 +203,8 @@ elif perfil_escolhido == "Painel Administrativo (Gestor)":
         adm_senha = st.text_input("Senha de Acesso (Senha padrão inicial: 123):", type="password", key="login_senha")
         
         if st.button("Entrar no Sistema Gerencial"):
-            # Normalização de CPF para busca precisa
-            adm_cpf_limpo = adm_cpf.strip().replace(".", "").replace("-", "")
-            df_gestores["CPF_Limpo"] = df_gestores["CPF"].astype(str).str.replace(".", "").str.replace("-", "").str.strip()
-            
-            gestor_match = df_gestores[df_gestores["CPF_Limpo"] == adm_cpf_limpo]
+            adm_cpf_normalizado = padronizar_cpf(adm_cpf)
+            gestor_match = df_gestores[df_gestores["CPF"] == adm_cpf_normalizado]
             
             if not gestor_match.empty:
                 g_row = gestor_match.iloc[0]
@@ -247,14 +237,13 @@ elif perfil_escolhido == "Painel Administrativo (Gestor)":
                 else:
                     st.error("Senha incorreta.")
             else:
-                st.error("CPF não cadastrado na base de gestores autorizados (`Cadastro.xlsx`).")
+                st.error(f"CPF '{adm_cpf}' não localizado na base de gestores autorizados (`Cadastro.xlsx`).")
                 
     with tab_recuperar:
         st.markdown("#### Recuperação de Senha de Gestor")
         email_rec = st.text_input("Informe seu e-mail institucional cadastrado:")
         if st.button("Enviar Instruções de Recuperação"):
             if email_rec:
-                # Verificação em background na Coluna C (E-mail) da planilha de cadastro
                 email_encontrado = not df_gestores[df_gestores["Email"].str.strip().str.lower() == email_rec.strip().lower()].empty
                 if email_encontrado:
                     st.success("Instruções de redefinição de senha enviadas com segurança para o e-mail corporativo cadastrado.")
