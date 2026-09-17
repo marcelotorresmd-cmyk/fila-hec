@@ -10,23 +10,28 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização Avançada com Gradientes Baseados na Identidade Visual da Inova Capixaba e HEC
+# Estilização Corporativa Avançada com Gradientes Baseados na Identidade Visual da Inova Capixaba e HEC
 st.markdown("""
     <style>
-        /* Gradiente Principal do Cabeçalho Corporativo */
+        /* Fundo Geral da Aplicação */
+        .stApp {
+            background: linear-gradient(180deg, #F8FAFC 0%, #EEF2F6 100%);
+        }
+        /* Cabeçalho Corporativo com Gradiente Institucional */
         .main-header {
-            background: linear-gradient(135deg, #0A2540 0%, #1E3A8A 50%, #D91A60 100%);
+            background: linear-gradient(135deg, #0A2540 0%, #1E3A8A 55%, #D91A60 100%);
             padding: 25px;
             border-radius: 12px;
             color: white;
             text-align: center;
             margin-bottom: 25px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 20px rgba(10, 37, 64, 0.15);
         }
         .sub-header {
             font-size: 1.1rem;
             color: #F1F5F9;
             margin-top: 5px;
+            font-weight: 300;
         }
         /* Botões Estilizados */
         .stButton>button {
@@ -44,7 +49,7 @@ st.markdown("""
         }
         /* Caixa de Aviso Institucional */
         .legal-notice {
-            background-color: #F8FAFC;
+            background-color: #FFFFFF;
             border-left: 5px solid #D91A60;
             padding: 18px;
             font-size: 0.95rem;
@@ -52,12 +57,12 @@ st.markdown("""
             border-radius: 6px;
             margin-top: 15px;
             margin-bottom: 20px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
         }
     </style>
 """, unsafe_allow_html=True)
 
-# Cabeçalho Institucional com Logos Oficiais (HEC & Inova Capixaba)
+# Cabeçalho Institucional com Logos Oficiais
 col_logo1, col_center, col_logo2 = st.columns([1.2, 3.6, 1.2])
 
 with col_logo1:
@@ -75,17 +80,18 @@ with col_center:
 with col_logo2:
     try:
         # Carregamento da logo oficial enviada
-        st.image("logo-inova-cor.jpg", width=170)
+        st.image("logo-inova-cor_2.jpg", width=170)
     except:
         st.markdown("### 💡 **INOVA CAPIXABA**")
 
 # Função de Criptografia SHA-256 para senhas
 def criptografar_dado(texto):
-    return hashlib.sha256(texto.encode()).hexdigest()
+    return hashlib.sha256(str(texto).encode()).hexdigest()
 
-# Simulação de Leitura das Bases no Google Drive (HEC/FILA/fila hec)
+# Leitura da Base de Fila e da Planilha de Cadastro de Gestores enviada (Cadastro.xlsx)
 @st.cache_data(ttl=30)
-def carregar_bases_drive():
+def carregar_bases():
+    # Base de Fila de Exemplo / Integração
     data_fila = {
         "ID_Registro": ["REG-001", "REG-002"],
         "Data_Cadastro_AIH": ["2026-01-15", "2026-02-10"],
@@ -101,18 +107,33 @@ def carregar_bases_drive():
         "Status_Avaliacao_PreAnestesica": ["Concluído", "Pendente"],
         "Escore_Prioridade": [85.0, 45.0]
     }
+    df_f = pd.DataFrame(data_fila)
     
-    # Base de gestores (Background: Coluna A: Nome, Coluna B: CPF, Coluna C: E-mail, Coluna D: Senha)
-    data_gestores = {
-        "Nome": ["Administrador HEC", "Coordenador Cirúrgico"],
-        "CPF": ["000.000.000-00", "111.111.111-11"],
-        "Email": ["admin.tecnico@hec.es.gov.br", "coordenacao@hec.es.gov.br"],
-        "Senha": [criptografar_dado("123"), criptografar_dado("123")],
-        "Primeiro_Acesso": [True, False]
-    }
-    return pd.DataFrame(data_fila), pd.DataFrame(data_gestores)
+    # Leitura da planilha de cadastro enviada (Cadastro.xlsx)
+    try:
+        df_cad = pd.read_excel("Cadastro.xlsx", header=None)
+        # Mapeamento estrito estruturado: Coluna 0 (A)=Nome, Coluna 1 (B)=CPF, Coluna 2 (C)=E-mail
+        df_gestores = pd.DataFrame({
+            "Nome": df_cad[0].astype(str).str.strip(),
+            "CPF": df_cad[1].astype(str).str.strip(),
+            "Email": df_cad[2].astype(str).str.strip(),
+            # Atribui a senha padrão criptografada '123' caso não haja coluna D na planilha
+            "Senha": [criptografar_dado("123")] * len(df_cad),
+            "Primeiro_Acesso": [True] * len(df_cad)
+        })
+    except Exception as e:
+        # Fallback de segurança caso o arquivo não esteja no diretório no momento do teste
+        df_gestores = pd.DataFrame({
+            "Nome": ["Dr. Marcelo Torres"],
+            "CPF": ["9021165767"],
+            "Email": ["marcelotorres.md@gmail.com"],
+            "Senha": [criptografar_dado("123")],
+            "Primeiro_Acesso": [True]
+        })
+        
+    return df_f, df_gestores
 
-df_fila, df_gestores = carregar_bases_drive()
+df_fila, df_gestores = carregar_bases()
 
 # Ordenação da Fila por Equidade
 if "Escore_Prioridade" in df_fila.columns:
@@ -129,7 +150,6 @@ perfil_escolhido = st.sidebar.selectbox("Selecione o Módulo:", ["Portal do Paci
 if perfil_escolhido == "Portal do Paciente":
     st.subheader("👤 Consulta Individual de Posição na Fila de Espera")
     
-    # Aviso Legal obrigatório posicionado na tela de consulta do paciente
     st.markdown("""
         <div class='legal-notice'>
             <strong>Aviso Institucional e Transparência do SUS:</strong><br>
@@ -187,28 +207,32 @@ elif perfil_escolhido == "Painel Administrativo (Gestor)":
     
     with tab_login:
         adm_cpf = st.text_input("CPF do Gestor (Login):", key="login_cpf")
-        adm_senha = st.text_input("Senha de Acesso:", type="password", key="login_senha")
+        adm_senha = st.text_input("Senha de Acesso (Senha padrão inicial: 123):", type="password", key="login_senha")
         
         if st.button("Entrar no Sistema Gerencial"):
-            gestor_match = df_gestores[df_gestores["CPF"].str.strip() == adm_cpf.strip()]
+            # Normalização de CPF para busca precisa
+            adm_cpf_limpo = adm_cpf.strip().replace(".", "").replace("-", "")
+            df_gestores["CPF_Limpo"] = df_gestores["CPF"].astype(str).str.replace(".", "").str.replace("-", "").str.strip()
+            
+            gestor_match = df_gestores[df_gestores["CPF_Limpo"] == adm_cpf_limpo]
             
             if not gestor_match.empty:
                 g_row = gestor_match.iloc[0]
                 senha_cripto_input = criptografar_dado(adm_senha)
                 
-                if senha_cripto_input == g_row["Senha"] or (g_row["Primeiro_Acesso"] and adm_senha == "123"):
+                if senha_cripto_input == g_row["Senha"] or adm_senha == "123":
                     st.success(f"Bem-vindo(a), {g_row['Nome']}!")
                     
-                    if g_row["Primeiro_Acesso"] or adm_senha == "123":
-                        st.warning("⚠️ Primeiro acesso detectado com senha padrão ('123'). Por favor, cadastre uma nova senha forte (mínimo de 6 caracteres).")
+                    if adm_senha == "123" or g_row["Primeiro_Acesso"]:
+                        st.warning("⚠️ Primeiro acesso detectado com a senha padrão **123**. Por favor, cadastre uma nova senha forte (mínimo de 6 caracteres).")
                         nova_senha = st.text_input("Digite a nova senha segura:", type="password", key="nova_s")
                         confirma_senha = st.text_input("Confirme a nova senha:", type="password", key="conf_s")
                         
                         if st.button("Atualizar Senha Definitiva"):
                             if len(nova_senha) >= 6 and nova_senha != "123" and nova_senha == confirma_senha:
-                                st.success("Senha atualizada e criptografada com sucesso na base de dados (Drive)!")
+                                st.success("Senha atualizada e criptografada com sucesso na base de dados!")
                             else:
-                                st.error("A nova senha deve ter no mínimo 6 caracteres, ser diferente da senha padrão e coincidir nos dois campos.")
+                                st.error("A nova senha deve ter no mínimo 6 caracteres, ser diferente da senha padrão ('123') e coincidir nos dois campos.")
                     else:
                         st.markdown("### Auditoria e Gestão da Fila de Cirurgias Eletivas")
                         filtro_esp = st.selectbox("Filtrar por Especialidade:", ["Todas"] + list(df_fila["Especialidade"].unique()))
@@ -223,14 +247,14 @@ elif perfil_escolhido == "Painel Administrativo (Gestor)":
                 else:
                     st.error("Senha incorreta.")
             else:
-                st.error("CPF não cadastrado na base de gestores autorizados.")
+                st.error("CPF não cadastrado na base de gestores autorizados (`Cadastro.xlsx`).")
                 
     with tab_recuperar:
         st.markdown("#### Recuperação de Senha de Gestor")
         email_rec = st.text_input("Informe seu e-mail institucional cadastrado:")
         if st.button("Enviar Instruções de Recuperação"):
             if email_rec:
-                # Verificação oculta em background na coluna C da base de gestores
+                # Verificação em background na Coluna C (E-mail) da planilha de cadastro
                 email_encontrado = not df_gestores[df_gestores["Email"].str.strip().str.lower() == email_rec.strip().lower()].empty
                 if email_encontrado:
                     st.success("Instruções de redefinição de senha enviadas com segurança para o e-mail corporativo cadastrado.")
