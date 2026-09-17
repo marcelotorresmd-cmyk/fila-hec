@@ -10,7 +10,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Gerenciamento de Estado (Persistência)
+# Gerenciamento de Estado (Persistência de Telas e Logins)
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
 if "usuario_logado" not in st.session_state:
@@ -19,14 +19,16 @@ if "banco_senhas_customizadas" not in st.session_state:
     st.session_state.banco_senhas_customizadas = {}
 if "banco_primeiro_acesso" not in st.session_state:
     st.session_state.banco_primeiro_acesso = {}
+if "paciente_logado" not in st.session_state:
+    st.session_state.paciente_logado = False
+if "dados_paciente" not in st.session_state:
+    st.session_state.dados_paciente = None
 
-# Estilização Avançada (UI/UX - Padrão Inova / Referências de Mercado)
+# Estilização Avançada (UI/UX - Padrão Inova / Clean Corporate)
 st.markdown("""
     <style>
-        /* Fundo limpo e textos escuros de alto contraste */
         .stApp { background-color: #F4F7F9; color: #1E293B; }
         
-        /* Cabeçalho Inova Capixaba (Azul Marinho) */
         .top-navbar {
             background-color: #17274D;
             padding: 15px 30px;
@@ -41,7 +43,6 @@ st.markdown("""
         .top-navbar h2 { color: #FFFFFF; margin: 0; font-size: 1.4rem; font-weight: 600; }
         .top-navbar span { color: #D91A60; font-weight: 800; }
         
-        /* Botões padronizados e com contraste corrigido */
         .stButton>button {
             background-color: #D91A60 !important;
             color: #FFFFFF !important;
@@ -60,7 +61,14 @@ st.markdown("""
             transform: translateY(-2px) !important;
         }
 
-        /* Cartões de Layout (Formulários e Resultados) */
+        .btn-voltar>button {
+            background-color: #64748B !important;
+            margin-top: 20px;
+        }
+        .btn-voltar>button:hover {
+            background-color: #475569 !important;
+        }
+
         .glass-card {
             background: #FFFFFF;
             padding: 35px;
@@ -69,7 +77,6 @@ st.markdown("""
             border: 1px solid #E2E8F0;
         }
 
-        /* Destaque Gigante para a Posição do Paciente */
         .highlight-queue {
             text-align: center;
             background: linear-gradient(145deg, #ffffff, #f0f4f8);
@@ -83,15 +90,16 @@ st.markdown("""
         .highlight-queue h1 { font-size: 6rem; color: #D91A60; margin: 0; font-weight: 900; line-height: 1; }
         .highlight-queue h2 { color: #17274D; font-size: 1.8rem; margin-top: 15px; }
 
-        /* Aviso Legal Minimalista */
         .legal-notice {
             background-color: #EFF6FF;
-            border-left: 4px solid #17274D;
-            padding: 15px 20px;
-            font-size: 0.9rem;
-            color: #334155 !important;
-            border-radius: 6px;
-            margin-bottom: 25px;
+            border-left: 5px solid #17274D;
+            padding: 20px 25px;
+            font-size: 1.05rem;
+            color: #1E293B !important;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            line-height: 1.6;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -104,7 +112,7 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# Imagem da Inova centralizada caso não consiga embutir no HTML
+# Inclusão da Logo Inova
 col_logo_space, col_logo_img, col_logo_space2 = st.columns([4, 2, 4])
 with col_logo_img:
     try:
@@ -178,61 +186,98 @@ else:
 st.markdown("---")
 
 # ---------------------------------------------------------
-# MÓDULO 1: PORTAL DO PACIENTE (Hero Layout)
+# MÓDULO 1: PORTAL DO PACIENTE
 # ---------------------------------------------------------
 if perfil_escolhido == "Portal do Paciente":
-    # Divisão em duas colunas inspirada em sites modernos (ex: Filazero)
-    col_texto, col_form = st.columns([1.2, 1], gap="large")
     
-    with col_texto:
-        st.markdown("<h1 style='color: #17274D; font-size: 2.8rem; font-weight: 800; line-height: 1.1;'>Sua transparência<br>na fila de espera.</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='font-size: 1.1rem; color: #475569; margin-top: 15px;'>Acompanhe em tempo real a sua posição para cirurgias eletivas no Hospital Estadual Central.</p>", unsafe_allow_html=True)
+    # TELA 1: AUTENTICAÇÃO DO PACIENTE
+    if not st.session_state.paciente_logado:
+        col_texto, col_form = st.columns([1.2, 1], gap="large")
         
+        with col_texto:
+            st.markdown("<h1 style='color: #17274D; font-size: 2.8rem; font-weight: 800; line-height: 1.1;'>Sua transparência<br>na fila de espera.</h1>", unsafe_allow_html=True)
+            st.markdown("<p style='font-size: 1.1rem; color: #475569; margin-top: 15px;'>Acompanhe em tempo real a sua posição para cirurgias eletivas no Hospital Estadual Central.</p>", unsafe_allow_html=True)
+    
+        with col_form:
+            st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+            st.markdown("<h3 style='color: #17274D; margin-bottom: 20px;'>Acesse seus dados</h3>", unsafe_allow_html=True)
+            pac_nome = st.text_input("Nome Completo:")
+            pac_cpf = st.text_input("CPF (com pontuação):")
+            pac_cns = st.text_input("Nº Cartão SUS (CNS):")
+            
+            st.write("")
+            if st.button("Ver Minha Posição ➔"):
+                if pac_nome and pac_cpf and pac_cns:
+                    match_paciente = df_fila[
+                        (df_fila["Nome_Paciente"].str.strip().str.lower() == pac_nome.strip().lower()) &
+                        (df_fila["CPF"].str.strip() == pac_cpf.strip()) &
+                        (df_fila["Cartao_SUS"].str.strip() == pac_cns.strip())
+                    ]
+                    
+                    if not match_paciente.empty:
+                        st.session_state.paciente_logado = True
+                        st.session_state.dados_paciente = match_paciente.iloc[0].to_dict()
+                        st.rerun()
+                    else:
+                        st.error("Dados incorretos. Verifique a digitação.")
+                else:
+                    st.warning("Preencha todos os campos obrigatórios.")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+    # TELA 2: RESULTADO E POSIÇÃO NA FILA (Nova Tela)
+    else:
+        p = st.session_state.dados_paciente
+        
+        # Aviso institucional em destaque na tela de resultado
         st.markdown("""
             <div class='legal-notice'>
-                <strong>Critérios de Priorização (SUS):</strong><br>
-                A fila não é exclusivamente cronológica. Nossa regulação avalia a gravidade, vulnerabilidade e a <strong>conclusão completa dos seus exames pré-operatórios</strong> para garantir equidade.
+                <strong>Transparência e Equidade no SUS:</strong><br><br>
+                Informamos que a fila de espera <strong>não obedece exclusivamente à ordem cronológica</strong> de inscrição. 
+                A priorização cirúrgica é determinada por rigorosos <strong>critérios técnicos e clínicos</strong>, avaliando a gravidade da doença, 
+                o risco de deterioração, a vulnerabilidade social e, fundamentalmente, a <strong>conclusão integral do preparo pré-operatório</strong>. 
+                Pacientes com todos os exames laboratoriais e avaliações pendentes solucionados possuem maior prontidão cirúrgica, 
+                garantindo a eficiência do centro cirúrgico e a justiça distributiva preconizada pelo Sistema Único de Saúde.
             </div>
         """, unsafe_allow_html=True)
 
-    with col_form:
-        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-        st.markdown("<h3 style='color: #17274D; margin-bottom: 20px;'>Acesse seus dados</h3>", unsafe_allow_html=True)
-        pac_nome = st.text_input("Nome Completo:")
-        pac_cpf = st.text_input("CPF (com pontuação):")
-        pac_cns = st.text_input("Nº Cartão SUS (CNS):")
+        st.markdown(f"""
+            <div class='highlight-queue'>
+                <h3>Sua Posição Atual</h3>
+                <h1>{int(p['Posicao_Fila'])}º</h1>
+                <h2>{p['Especialidade']}</h2>
+                <p style='color: #64748B; margin-top: 10px;'>Protocolo AIH: {p['Numero_AIH']}</p>
+            </div>
+        """, unsafe_allow_html=True)
         
-        st.write("")
-        if st.button("Ver Minha Posição ➔"):
-            if pac_nome and pac_cpf and pac_cns:
-                match_paciente = df_fila[
-                    (df_fila["Nome_Paciente"].str.strip().str.lower() == pac_nome.strip().lower()) &
-                    (df_fila["CPF"].str.strip() == pac_cpf.strip()) &
-                    (df_fila["Cartao_SUS"].str.strip() == pac_cns.strip())
-                ]
-                
-                if not match_paciente.empty:
-                    p = match_paciente.iloc[0]
-                    # Exibição de Destaque Absoluto (Número Gigante)
-                    st.markdown(f"""
-                        <div class='highlight-queue'>
-                            <h3>Sua Posição Atual</h3>
-                            <h1>{int(p['Posicao_Fila'])}º</h1>
-                            <h2>{p['Especialidade']}</h2>
-                            <p style='color: #64748B; margin-top: 10px;'>AIH: {p['Numero_AIH']}</p>
-                        </div>
-                    """, unsafe_allow_html=True)
-                    
-                    st.markdown("#### Status do Preparo Cirúrgico:")
-                    e1, e2, e3, e4 = st.columns(4)
-                    e1.success(f"Exames Lab: {p['Status_Exames_Lab']}") if p['Status_Exames_Lab'] == 'Concluído' else e1.error(f"Exames Lab: Pendente")
-                    e2.success(f"Imagem: {p['Status_Exames_Imagem']}") if p['Status_Exames_Imagem'] == 'Concluído' else e2.error(f"Imagem: Pendente")
-                    e3.success(f"Cardiologia: {p['Status_Avaliacao_Cardio']}") if p['Status_Avaliacao_Cardio'] == 'Concluído' else e3.error(f"Cardiologia: Pendente")
-                    e4.success(f"Pré-Anestésica: {p['Status_Avaliacao_PreAnestesica']}") if p['Status_Avaliacao_PreAnestesica'] == 'Concluído' else e4.error(f"Pré-Anestésica: Pendente")
-                else:
-                    st.error("Dados incorretos. Utilize as credenciais de teste para visualizar.")
-            else:
-                st.warning("Preencha todos os campos obrigatórios.")
+        st.markdown("#### Status Atual do Preparo Cirúrgico:")
+        e1, e2, e3, e4 = st.columns(4)
+        
+        # Correção do vazamento de código com blocos condicionais estritos
+        if p['Status_Exames_Lab'] == 'Concluído':
+            e1.success("Exames Lab: Concluído")
+        else:
+            e1.error("Exames Lab: Pendente")
+            
+        if p['Status_Exames_Imagem'] == 'Concluído':
+            e2.success("Imagem: Concluído")
+        else:
+            e2.error("Imagem: Pendente")
+            
+        if p['Status_Avaliacao_Cardio'] == 'Concluído':
+            e3.success("Cardiologia: Concluído")
+        else:
+            e3.error("Cardiologia: Pendente")
+            
+        if p['Status_Avaliacao_PreAnestesica'] == 'Concluído':
+            e4.success("Pré-Anestésica: Concluído")
+        else:
+            e4.error("Pré-Anestésica: Pendente")
+            
+        st.markdown("<div class='btn-voltar'>", unsafe_allow_html=True)
+        if st.button("⬅ Voltar para Nova Consulta"):
+            st.session_state.paciente_logado = False
+            st.session_state.dados_paciente = None
+            st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
@@ -272,7 +317,6 @@ elif perfil_escolhido == "Painel Administrativo":
             st.markdown("</div>", unsafe_allow_html=True)
 
     else:
-        # Área Logada
         usuario = st.session_state.usuario_logado
         cpf_k = usuario["CPF"]
         pendente = st.session_state.banco_primeiro_acesso.get(cpf_k, usuario["Primeiro_Acesso_Original"])
