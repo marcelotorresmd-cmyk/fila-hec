@@ -68,13 +68,9 @@ def SAN(v):
 
 
 def validar_cpf(cpf_d):
-    if len(cpf_d) != 11 or cpf_d == cpf_d[0] * 11:
-        return False
-    for n in (9, 10):
-        s = sum(int(cpf_d[i]) * (n - i) for i in range(n))
-        if int(cpf_d[n]) != (s * 10) % 11 % 10:
-            return False
-    return True
+    """Aceita qualquer CPF com 11 dígitos — a autenticação de fato
+    acontece na comparação com a planilha de cadastro."""
+    return len(cpf_d) == 11 and cpf_d != cpf_d[0] * 11
 
 
 def confere_senha(senha, hash_alvo):
@@ -122,7 +118,7 @@ def cliente_gdrive():
 
 
 def gravar_senha_hash(cpf_d, hash_val):
-    """Grava o hash na coluna D da planilha de gestores (A=Nome, B=CPF, C=Email)."""
+    """Grava o hash na planilha de gestores (A=Nome, B=CPF, C=Email, D=Senha_Hash)."""
     gc = cliente_gdrive()
     if gc is None:
         return False
@@ -252,8 +248,8 @@ def tela_consulta():
     if not ok:
         return
     cpf_d, sus_d = DIG(cpf), DIG(sus)
-    if not validar_cpf(cpf_d):
-        st.error("CPF inválido — verifique os 11 dígitos.")
+    if len(cpf_d) != 11:
+        st.error("Informe o CPF com 11 dígitos.")
         return
     if len(sus_d) != 15:
         st.error("Informe o CNS completo com 15 dígitos.")
@@ -364,8 +360,8 @@ def tela_login_gestor():
     if bloqueado:
         return
     cpf_d = DIG(g_cpf)
-    if not validar_cpf(cpf_d):
-        st.error("CPF inválido.")
+    if len(cpf_d) != 11:
+        st.error("Informe o CPF com 11 dígitos.")
         return
     _, cad = carregar()
     linha_cad = cad[cad.get("CPF_DIG", pd.Series(dtype=str)) == cpf_d] if "CPF_DIG" in cad.columns else pd.DataFrame()
