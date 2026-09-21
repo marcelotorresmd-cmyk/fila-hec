@@ -1,340 +1,504 @@
-import streamlit as st
-import pandas as pd
-import hashlib
+# -*- coding: utf-8 -*-
+"""
+Portal de Visualização da Posição da Fila — Hospital Estadual Central
+Visual: padrão Fundação Inova Capixaba (logo PNG original — nunca regenerar)
+Base: Google Sheets "Fila HEC" + "Cadastro"
+"""
 
-# Configuração da Página
+import hashlib
+import html
+import time
+from datetime import datetime
+
+import bcrypt
+import pandas as pd
+import streamlit as st
+
+# ================================================================
+# CONFIGURAÇÃO
+# ================================================================
 st.set_page_config(
-    page_title="Fila Cirúrgica | HEC & Inova Capixaba",
+    page_title="Fila de Espera — HEC",
     page_icon="🏥",
-    layout="wide",
-    initial_sidebar_state="collapsed"
+    layout="centered",
+    initial_sidebar_state="collapsed",
 )
 
-# Gerenciamento de Estado (Persistência)
-if "autenticado" not in st.session_state:
-    st.session_state.autenticado = False
-if "usuario_logado" not in st.session_state:
-    st.session_state.usuario_logado = None
-if "banco_senhas_customizadas" not in st.session_state:
-    st.session_state.banco_senhas_customizadas = {}
-if "banco_primeiro_acesso" not in st.session_state:
-    st.session_state.banco_primeiro_acesso = {}
-if "paciente_logado" not in st.session_state:
-    st.session_state.paciente_logado = False
-if "dados_paciente" not in st.session_state:
-    st.session_state.dados_paciente = None
-if "modo_gestor" not in st.session_state:
-    st.session_state.modo_gestor = False
+# IDs das planilhas (devem estar com "Qualquer pessoa com o link: Leitor")
+SHEET_FILA_ID = st.secrets.get("SHEET_FILA_ID", "1d1X3vGQGdRA5Wpg3cnfKIYSXRiE6VC1XoCTn1XBcTj0")
+SHEET_CADASTRO_ID = st.secrets.get("SHEET_CADASTRO_ID", "1FRvVEvL4S3oCJJKA2OzrKnSOqiphRjZy-lq4cv65EXY")
+ABA_FILA = "Página1"
+ABA_CADASTRO = "Cadastro"
 
-# Estilização Avançada (Fundo com Contraste e UI Limpa)
+COLUNAS_FILA = [
+    "ID_Registro", "Data_Cadastro_AIH", "Nome_Paciente", "Cartao_SUS", "CPF",
+    "Data_Nascimento", "Especialidade", "Numero_AIH", "CID",
+    "Status_Exames_Lab", "Status_Exames_Imagem", "Status_Avaliacao_Cardio",
+    "Status_Avaliacao_PreAnestesica", "Escore_Prioridade",
+]
+
+# ================================================================
+# VISUAL — PADRÃO INOVA (azul #344a80 / rosa #ec6a88 / gradiente magenta)
+# ================================================================
 st.markdown("""
     <style>
-        /* Fundo com contraste elegante (Cinza Ardósia Claro) para destacar os cartões brancos */
-        .stApp { background-color: #E2E8F0; color: #1E293B; }
-        
-        /* Botão Superior Direito Discreto para Gestores */
-        .btn-gestor>button {
-            background-color: transparent !important;
-            color: #64748B !important;
-            border: 1px solid #CBD5E1 !important;
-            border-radius: 20px !important;
-            padding: 0.3rem 1rem !important;
-            font-size: 0.85rem !important;
-            font-weight: 600 !important;
-            float: right;
-            box-shadow: none !important;
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&family=Poppins:wght@400;500;600&display=swap');
+        html, body, .stApp, .stButton>button, h1, h2, h3, h4 {
+            font-family: 'Poppins', sans-serif !important;
         }
-        .btn-gestor>button:hover {
-            background-color: #CBD5E1 !important;
-            color: #1E293B !important;
+        h1, h2, h3 { font-family: 'Montserrat', sans-serif !important; }
+
+        .stApp {
+            background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%) !important;
+            color: #263238 !important;
         }
 
-        /* Botões de Ação Principais (Inova Magenta) */
         .stButton>button {
-            background-color: #D91A60 !important;
-            color: #FFFFFF !important;
+            background-color: #344a80 !important;
+            color: #ffffff !important;
             border-radius: 8px !important;
             border: none !important;
             font-weight: 700 !important;
-            font-size: 1.1rem !important;
-            padding: 0.6rem 1.2rem !important;
-            box-shadow: 0 4px 10px rgba(217, 26, 96, 0.3) !important;
+            font-size: 1rem !important;
+            padding: 0.6rem 1.4rem !important;
+            box-shadow: 0 4px 12px rgba(52, 74, 128, 0.25) !important;
             transition: all 0.2s ease-in-out;
             width: 100%;
         }
         .stButton>button:hover {
-            background-color: #B81550 !important;
-            box-shadow: 0 6px 15px rgba(217, 26, 96, 0.4) !important;
+            background-color: #ec6a88 !important;
             transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(236, 106, 136, 0.4) !important;
         }
 
-        /* Cartões Flutuantes Brancos (Alto Contraste com o Fundo) */
+        .btn-gestor>button {
+            background-color: transparent !important;
+            color: #344a80 !important;
+            border: 1px solid #344a80 !important;
+            border-radius: 20px !important;
+            padding: 0.3rem 1rem !important;
+            font-size: 0.85rem !important;
+            font-weight: 600 !important;
+            box-shadow: none !important;
+        }
+        .btn-gestor>button:hover {
+            background-color: #ec6a88 !important;
+            color: #ffffff !important;
+            border-color: #ec6a88 !important;
+        }
+
         .glass-card {
-            background: #FFFFFF;
+            background: #ffffff;
             padding: 35px;
             border-radius: 16px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
-            border: 1px solid #FFFFFF;
+            border: 1px solid #f0f0f0;
+            box-shadow: 0 8px 28px rgba(35, 50, 86, 0.10);
             margin-bottom: 20px;
         }
 
-        /* Destaque Gigante para Posição */
         .highlight-queue {
             text-align: center;
-            background: linear-gradient(145deg, #ffffff, #F8FAFC);
+            background: #ffffff;
             border-radius: 20px;
             padding: 40px 20px;
-            border: 2px solid #E2E8F0;
-            box-shadow: inset 0 2px 10px rgba(0,0,0,0.02), 0 10px 25px rgba(0,0,0,0.08);
+            border-top: 6px solid #ec6a88;
+            border-bottom: 6px solid #344a80;
+            box-shadow: 0 10px 30px rgba(35, 50, 86, 0.10);
             margin-bottom: 30px;
         }
-        .highlight-queue h3 { color: #64748B; margin-bottom: 5px; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 1px; }
-        .highlight-queue h1 { font-size: 6rem; color: #D91A60; margin: 0; font-weight: 900; line-height: 1; }
-        .highlight-queue h2 { color: #17274D; font-size: 1.8rem; margin-top: 15px; }
+        .highlight-queue h3 {
+            color: #344a80; margin-bottom: 5px; font-size: 1.15rem;
+            text-transform: uppercase; letter-spacing: 1.5px;
+        }
+        .highlight-queue h1 {
+            font-size: 6rem;
+            background: linear-gradient(145deg, #ab0846, #f55078);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin: 0; font-weight: 900; line-height: 1;
+        }
+        .highlight-queue h2 { color: #344a80; font-size: 1.7rem; margin-top: 15px; }
 
-        /* Aviso Legal Minimalista */
         .legal-notice {
-            background-color: #EFF6FF;
-            border-left: 5px solid #17274D;
-            padding: 20px 25px;
-            font-size: 1.05rem;
-            color: #1E293B !important;
-            border-radius: 8px;
+            background-color: #ffffff;
+            border-left: 5px solid #ec6a88;
+            padding: 22px 26px;
+            font-size: 1rem;
+            color: #263238 !important;
+            border-radius: 10px;
             margin-bottom: 30px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-            line-height: 1.6;
+            box-shadow: 0 4px 12px rgba(35, 50, 86, 0.08);
+            line-height: 1.7;
         }
-        
-        /* Oculta marca d'água do Streamlit */
-        footer {visibility: hidden;}
+        .legal-notice strong { color: #344a80; }
+
+        footer { visibility: hidden; }
     </style>
 """, unsafe_allow_html=True)
 
-# ---------------------------------------------------------
-# CABEÇALHO SUPERIOR (Logos e Botão de Acesso)
-# ---------------------------------------------------------
-col_logo, col_vazio, col_btn_gestor = st.columns([2, 5, 2])
-with col_logo:
-    try:
-        st.image("logo-inova-cor_2.jpg", width=160)
-    except:
-        st.markdown("### 🏥 **HEC | INOVA**")
+# ================================================================
+# SEGURANÇA — FUNÇÕES
+# ================================================================
 
-with col_btn_gestor:
-    st.markdown("<div class='btn-gestor'>", unsafe_allow_html=True)
-    if st.session_state.autenticado:
-        if st.button("Sair (Logout)"):
-            st.session_state.autenticado = False
-            st.session_state.usuario_logado = None
-            st.session_state.modo_gestor = False
-            st.rerun()
-    else:
-        rotulo_botao = "⬅ Voltar ao Portal" if st.session_state.modo_gestor else "🔒 Acesso Gestor"
-        if st.button(rotulo_botao):
-            st.session_state.modo_gestor = not st.session_state.modo_gestor
-            st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-# Funções Utilitárias
-def criptografar_dado(texto):
+def criptografar_dado(texto: str) -> str:
+    """Hash SHA-256 apenas para comparação de identificadores (não usar em senha)."""
     return hashlib.sha256(str(texto).encode()).hexdigest()
 
-def padronizar_cpf(cpf_str):
-    return "".join(filter(str.isdigit, str(cpf_str))).zfill(11)
 
-# Leitura Simulada de Dados (Com Inclusão do CID)
-@st.cache_data(ttl=30)
-def carregar_bases():
-    data_fila = {
-        "ID_Registro": ["REG-001", "REG-002"],
-        "Data_Cadastro_AIH": ["2026-01-15", "2026-02-10"],
-        "Nome_Paciente": ["Maria Oliveira Santos", "João Pereira da Silva"],
-        "Cartao_SUS": ["123456789012345", "987654321098765"],
-        "CPF": ["111.222.333-44", "222.333.444-55"],
-        "Data_Nascimento": ["1965-04-12", "1980-09-25"],
-        "Especialidade": ["Neurocirurgia", "Ortopedia"],
-        "Numero_AIH": ["AIH-987654", "AIH-123456"],
-        "CID": ["C71.9", "M51.1"], # Adição da Coluna CID
-        "Status_Exames_Lab": ["Concluído", "Concluído"],
-        "Status_Exames_Imagem": ["Concluído", "Pendente"],
-        "Status_Avaliacao_Cardio": ["Concluído", "Concluído"],
-        "Status_Avaliacao_PreAnestesica": ["Concluído", "Pendente"],
-        "Escore_Prioridade": [135.0, 45.0] # Escore elevado artificialmente para a paciente oncológica
-    }
-    df_f = pd.DataFrame(data_fila)
-    
+def hash_senha(senha: str) -> str:
+    return bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
+
+
+def verificar_senha(senha: str, hash_armazenado: str) -> bool:
     try:
-        df_cad = pd.read_excel("Cadastro.xlsx", header=None)
-        df_gestores = pd.DataFrame({
-            "Nome": df_cad[0].astype(str).str.strip(),
-            "CPF": df_cad[1].apply(padronizar_cpf),
-            "Email": df_cad[2].astype(str).str.strip(),
-            "Senha_Original": [criptografar_dado("123")] * len(df_cad),
-            "Primeiro_Acesso_Original": [True] * len(df_cad)
-        })
-    except:
-        df_gestores = pd.DataFrame({
-            "Nome": ["Dr. Marcelo Torres"],
-            "CPF": [padronizar_cpf("09021165767")],
-            "Email": ["marcelotorres.md@gmail.com"],
-            "Senha_Original": [criptografar_dado("123")],
-            "Primeiro_Acesso_Original": [True]
-        })
-    return df_f, df_gestores
-
-df_fila, df_gestores = carregar_bases()
-if "Escore_Prioridade" in df_fila.columns:
-    df_fila = df_fila.sort_values(by="Escore_Prioridade", ascending=False).reset_index(drop=True)
-    df_fila["Posicao_Fila"] = df_fila.index + 1
+        return bcrypt.checkpw(senha.encode(), hash_armazenado.encode())
+    except (ValueError, TypeError):
+        return False
 
 
-# ---------------------------------------------------------
-# MÓDULO 1: PORTAL DO PACIENTE (Modo Padrão)
-# ---------------------------------------------------------
-if not st.session_state.modo_gestor:
-    
-    # TELA 1: AUTENTICAÇÃO DO PACIENTE
-    if not st.session_state.paciente_logado:
-        col_texto, col_form = st.columns([1.2, 1], gap="large")
-        
-        with col_texto:
-            st.markdown("<h1 style='color: #0A2540; font-size: 3rem; font-weight: 800; line-height: 1.1;'>Transparência total<br>na sua espera.</h1>", unsafe_allow_html=True)
-            st.markdown("<p style='font-size: 1.15rem; color: #475569; margin-top: 15px;'>Consulte em tempo real a sua posição e pendências para cirurgias eletivas no Hospital Estadual Central.</p>", unsafe_allow_html=True)
-            
-            st.markdown("""
-                <div class='legal-notice'>
-                    <strong>Priorização Técnica no SUS:</strong><br><br>
-                    O agendamento cirúrgico não segue apenas a ordem de chegada. Ele prioriza a gravidade da doença (ex: <strong>diagnósticos oncológicos</strong> possuem peso adicional), riscos clínicos e a <strong>conclusão de todos os exames pré-operatórios</strong>.
-                </div>
-            """, unsafe_allow_html=True)
-    
-        with col_form:
-            st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-            st.markdown("<h3 style='color: #0A2540; margin-bottom: 20px;'>Autenticação do Paciente</h3>", unsafe_allow_html=True)
-            pac_nome = st.text_input("Nome Completo:")
-            pac_cpf = st.text_input("CPF (com pontuação, ex: 111.222.333-44):")
-            pac_cns = st.text_input("Nº Cartão SUS (CNS):")
-            
-            st.write("")
-            if st.button("Consultar Posição ➔"):
-                if pac_nome and pac_cpf and pac_cns:
-                    match_paciente = df_fila[
-                        (df_fila["Nome_Paciente"].str.strip().str.lower() == pac_nome.strip().lower()) &
-                        (df_fila["CPF"].str.strip() == pac_cpf.strip()) &
-                        (df_fila["Cartao_SUS"].str.strip() == pac_cns.strip())
-                    ]
-                    
-                    if not match_paciente.empty:
-                        st.session_state.paciente_logado = True
-                        st.session_state.dados_paciente = match_paciente.iloc[0].to_dict()
-                        st.rerun()
-                    else:
-                        st.error("Dados não encontrados. Verifique a digitação.")
-                else:
-                    st.warning("Preencha todos os campos.")
-            st.markdown("</div>", unsafe_allow_html=True)
+def padronizar_cpf(cpf: str) -> str:
+    """Mantém apenas dígitos do CPF."""
+    return "".join(c for c in str(cpf or "") if c.isdigit())
 
-    # TELA 2: RESULTADO E POSIÇÃO
-    else:
-        p = st.session_state.dados_paciente
-        
-        st.markdown(f"""
-            <div class='highlight-queue'>
-                <h3>Sua Posição Atual na Fila</h3>
-                <h1>{int(p['Posicao_Fila'])}º</h1>
-                <h2>{p['Especialidade']}</h2>
-                <p style='color: #64748B; margin-top: 10px;'>Protocolo AIH: <strong>{p['Numero_AIH']}</strong> | CID Cadastrado: <strong>{p.get('CID', 'Não informado')}</strong></p>
+
+def sanitizar(texto) -> str:
+    """Escapa HTML antes de qualquer interpolação em st.markdown com HTML."""
+    return html.escape(str(texto if texto is not None else ""))
+
+
+def limitar_tentativas() -> bool:
+    """Bloqueia login por 5 minutos após 5 tentativas falhas."""
+    falhas = st.session_state.get("tentativas_login", 0)
+    bloqueio_ate = st.session_state.get("bloqueio_ate", 0)
+    if time.time() < bloqueio_ate:
+        restante = int(bloqueio_ate - time.time())
+        st.error(f"Muitas tentativas. Aguarde {restante} segundos antes de tentar novamente.")
+        return False
+    if falhas >= 5:
+        st.session_state.bloqueio_ate = time.time() + 300
+        st.session_state.tentativas_login = 0
+        return False
+    return True
+
+
+def registrar_falha_login():
+    st.session_state.tentativas_login = st.session_state.get("tentativas_login", 0) + 1
+
+
+def limpar_sessao():
+    """Remove dados sensíveis da sessão (logout)."""
+    for chave in ["logado", "dados_paciente", "gestor", "novo_cpf"]:
+        st.session_state.pop(chave, None)
+
+# ================================================================
+# DADOS — LEITURA DAS PLANILHAS (Google Sheets via CSV público)
+# ================================================================
+
+@st.cache_data(ttl=30, show_spinner="Atualizando base...")
+def carregar_bases():
+    url_fila = (
+        f"https://docs.google.com/spreadsheets/d/{SHEET_FILA_ID}/gviz/tq"
+        f"?tqx=out:csv&sheet={ABA_FILA}"
+    )
+    url_cadastro = (
+        f"https://docs.google.com/spreadsheets/d/{SHEET_CADASTRO_ID}/gviz/tq"
+        f"?tqx=out:csv&sheet={ABA_CADASTRO}"
+    )
+    try:
+        df_fila = pd.read_csv(url_fila, dtype=str)
+    except Exception:
+        df_fila = pd.DataFrame(columns=COLUNAS_FILA)
+
+    try:
+        df_cadastro = pd.read_csv(url_cadastro, dtype=str)
+    except Exception:
+        df_cadastro = pd.DataFrame(columns=["Nome Completo", "CPF", "Nome na escala", "Telefone"])
+
+    # Normalizações
+    df_fila.columns = [c.strip() for c in df_fila.columns]
+    df_cadastro.columns = [c.strip() for c in df_cadastro.columns]
+
+    # Remove linhas fantasma: sem Nome_Paciente OU sem CPF
+    if "Nome_Paciente" in df_fila.columns and "CPF" in df_fila.columns:
+        df_fila = df_fila[
+            df_fila["Nome_Paciente"].notna()
+            & (df_fila["Nome_Paciente"].str.strip() != "")
+            & df_fila["CPF"].notna()
+            & (df_fila["CPF"].str.strip() != "")
+        ].copy()
+        df_fila["CPF_Digitos"] = df_fila["CPF"].apply(padronizar_cpf)
+        df_fila["Escore_Num"] = pd.to_numeric(
+            df_fila.get("Escore_Prioridade", "").astype(str).str.replace(",", "."), errors="coerce"
+        )
+        df_fila["Ordem_Cadastro"] = pd.to_datetime(
+            df_fila.get("Data_Cadastro_AIH"), errors="coerce", dayfirst=True
+        )
+
+    return df_fila, df_cadastro
+
+
+def calcular_fila(df_fila: pd.DataFrame) -> pd.DataFrame:
+    """Ordena a fila por prioridade de espera (mais antigo primeiro)."""
+    if df_fila.empty:
+        return df_fila
+    return df_fila.sort_values(
+        by=["Ordem_Cadastro", "Escore_Num"],
+        ascending=[True, False],
+        na_position="last",
+    ).reset_index(drop=True)
+
+# ================================================================
+# CABEÇALHO INSTITUCIONAL
+# ================================================================
+
+def renderizar_cabecalho():
+    st.markdown("""
+        <div style="display:flex; justify-content:space-between; align-items:flex-end;
+                    margin-bottom:15px; flex-wrap:wrap; gap:10px;">
+            <div>
+                <h1 style="font-size:1.6rem; color:#344a80; margin:0;">
+                    HOSPITAL ESTADUAL CENTRAL
+                </h1>
+                <p style="margin:0; color:#263238; font-size:0.95rem;">
+                    Portal de Acompanhamento da Fila de Espera
+                </p>
             </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-        st.markdown("<h4 style='color: #0A2540; margin-bottom: 20px;'>Checklist do Preparo Cirúrgico</h4>", unsafe_allow_html=True)
-        e1, e2, e3, e4 = st.columns(4)
-        
-        if p['Status_Exames_Lab'] == 'Concluído': e1.success("Exames Lab: Concluído")
-        else: e1.error("Exames Lab: Pendente")
-            
-        if p['Status_Exames_Imagem'] == 'Concluído': e2.success("Imagem: Concluído")
-        else: e2.error("Imagem: Pendente")
-            
-        if p['Status_Avaliacao_Cardio'] == 'Concluído': e3.success("Cardiologia: Concluído")
-        else: e3.error("Cardiologia: Pendente")
-            
-        if p['Status_Avaliacao_PreAnestesica'] == 'Concluído': e4.success("Pré-Anestésica: Concluído")
-        else: e4.error("Pré-Anestésica: Pendente")
-        st.markdown("</div>", unsafe_allow_html=True)
-            
-        if st.button("⬅ Nova Consulta"):
-            st.session_state.paciente_logado = False
-            st.session_state.dados_paciente = None
+            <div style="font-family:'Montserrat',sans-serif; font-weight:800;
+                        color:#344a80; font-size:0.9rem;">
+                FUNDAÇÃO <span style="color:#ec6a88;">INOVA</span> CAPIXABA
+            </div>
+        </div>
+        <hr style="border:none; height:2px;
+                   background:linear-gradient(90deg, #344a80, #ec6a88);
+                   border-radius:2px; margin-bottom:25px;">
+    """, unsafe_allow_html=True)
+
+
+def renderizar_rodape():
+    st.markdown("""
+        <p style="text-align:center; color:#263238; font-size:0.8rem;
+                  margin-top:40px; opacity:0.8;">
+            Hospital Estadual Central — Acolher e Cuidar · SUS · Governo do Estado do Espírito Santo
+        </p>
+    """, unsafe_allow_html=True)
+
+# ================================================================
+# TELAS
+# ================================================================
+
+def tela_consulta_paciente():
+    renderizar_cabecalho()
+
+    st.markdown(
+        '<div class="legal-notice">Este portal exibe a <strong>posição na fila de espera</strong> '
+        'de cirurgias eletivas conforme dados oficiais do Hospital Estadual Central. '
+        'Para consultar, informe seu <strong>CPF</strong> e a <strong>data de nascimento</strong> '
+        'cadastrados. Nenhum dado pessoal é armazenado nesta consulta.</div>',
+        unsafe_allow_html=True,
+    )
+
+    with st.form("form_consulta"):
+        cpf_input = st.text_input("CPF", placeholder="000.000.000-00")
+        nascimento_input = st.text_input("Data de Nascimento", placeholder="DD/MM/AAAA")
+        enviado = st.form_submit_button("Consultar Minha Posição")
+
+    if not enviado:
+        renderizar_rodape()
+        return
+
+    cpf_digitos = padronizar_cpf(cpf_input)
+    if len(cpf_digitos) != 11:
+        st.error("Informe um CPF válido com 11 dígitos.")
+        return
+
+    df_fila, _ = carregar_bases()
+    if df_fila.empty:
+        st.error("Não foi possível ler a base de dados agora. Tente novamente em instantes.")
+        return
+
+    # Consulta exige CPF + nascimento (evita enumeração por CPF)
+    nascimento_norm = nascimento_input.strip()
+    mascara = (
+        (df_fila["CPF_Digitos"] == cpf_digitos)
+        & (
+            df_fila["Data_Nascimento"].astype(str).str.strip().str[:10]
+            == pd.to_datetime(nascimento_norm, dayfirst=True, errors="coerce").strftime("%Y-%m-%d")
+        )
+    )
+    resultado = df_fila[mascara]
+
+    if resultado.empty:
+        st.warning("Paciente não localizado na fila. Verifique os dados ou procure a regulação do hospital.")
+        return
+
+    fila_ordenada = calcular_fila(df_fila)
+    posicao = fila_ordenada.index[fila_ordenada["CPF_Digitos"] == cpf_digitos][0] + 1
+    p = resultado.iloc[0]
+
+    # Guarda APENAS os campos exibidos — nunca o CPF/CNS completos
+    st.session_state.dados_paciente = {
+        "nome": p["Nome_Paciente"],
+        "posicao": int(posicao),
+        "especialidade": p.get("Especialidade", "—"),
+        "aih": p.get("Numero_AIH", "—"),
+        "cid": p.get("CID", "") or "—",
+        "lab": p.get("Status_Exames_Lab", "—"),
+        "imagem": p.get("Status_Exames_Imagem", "—"),
+        "cardio": p.get("Status_Avaliacao_Cardio", "—"),
+        "pre_anestesica": p.get("Status_Avaliacao_PreAnestesica", "—"),
+ecialidade" in st.session_state.dados_paciente else None
+    )
+
+
+def renderizar_resultado():
+    d = st.session_state.dados_paciente
+    nome = sanitizar(d["nome"].split()[0])  # apenas primeiro nome na tela
+
+    st.markdown(f"""
+        <div class="highlight-queue">
+            <h3>Olá, {nome}! Sua posição na fila é</h3>
+            <h1>{d['posicao']}º</h1>
+            <h2>{sanitizar(d['especialidade'])}</h2>
+        </div>
+    """, unsafe_allow_html=True)
+
+    with st.container(border=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown(f"**AIH:** {sanitizar(d['aih'])}")
+            st.markdown(f"**CID:** {sanitizar(d['cid'])}")
+ecialidade")}")
+        with col2:
+            st.markdown(f"**Exames Laboratoriais:** {sanitizar(d['lab'])}")
+            st.markdown(f"**Exames de Imagem:** {sanitizar(d['imagem'])}")
+            st.markdown(f"**Avaliação Cardio:** {sanitizar(d['cardio'])}")
+            st.markdown(f"**Pré-Anestésica:** {sanitizar(d['pre_anestesica'])}")
+
+    st.markdown(
+        '<div class="legal-notice"><strong>Acompanhe:</strong> a posição pode mudar conforme '
+        'chamadas e desistências. Mantenha seus exames em dia. Em caso de piora do quadro, '
+        'procure imediatamente o serviço de saúde ou a UPA mais próxima.</div>',
+        unsafe_allow_html=True,
+    )
+
+    col_btn, _ = st.columns([1, 2])
+    with col_btn:
+        if st.button("Nova Consulta"):
+            limpar_sessao()
             st.rerun()
 
+    renderizar_rodape()
 
-# ---------------------------------------------------------
-# MÓDULO 2: PAINEL ADMINISTRATIVO (Modo Gestor)
-# ---------------------------------------------------------
-else:
-    if not st.session_state.autenticado:
-        col_esp, col_login, col_esp2 = st.columns([1.5, 2, 1.5])
-        with col_login:
-            st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-            st.markdown("<h3 style='color: #0A2540; text-align: center; margin-bottom: 25px;'>Painel Institucional</h3>", unsafe_allow_html=True)
-            adm_cpf = st.text_input("CPF do Gestor (Apenas números):")
-            adm_senha = st.text_input("Senha:", type="password")
-            
-            st.write("")
-            if st.button("Autenticar"):
-                if adm_cpf and adm_senha:
-                    cpf_norm = padronizar_cpf(adm_cpf)
-                    match_gest = df_gestores[df_gestores["CPF"] == cpf_norm]
-                    
-                    if not match_gest.empty:
-                        g_row = match_gest.iloc[0]
-                        cpf_k = g_row["CPF"]
-                        senha_ativa = st.session_state.banco_senhas_customizadas.get(cpf_k, g_row["Senha_Original"])
-                        
-                        if criptografar_dado(adm_senha) == senha_ativa:
-                            st.session_state.autenticado = True
-                            st.session_state.usuario_logado = g_row.to_dict()
-                            st.rerun()
-                        else:
-                            st.error("Credenciais inválidas.")
-                    else:
-                        st.error("CPF não autorizado na base administrativa.")
-                else:
-                    st.warning("Preencha CPF e Senha.")
-            st.markdown("</div>", unsafe_allow_html=True)
 
+def tela_login_gestor():
+    renderizar_cabecalho()
+
+    if not limitar_tentativas():
+        renderizar_rodape()
+        return
+
+    _, df_cadastro = carregar_bases()
+
+    st.markdown("### 🔐 Área do Gestor")
+    with st.form("form_gestor"):
+        cpf_gestor = st.text_input("CPF do Gestor", placeholder="000.000.000-00")
+        senha_gestor = st.text_input("Senha", type="password")
+        entrar = st.form_submit_button("Entrar")
+
+    if not entrar:
+        renderizar_rodape()
+        return
+
+    cpf_digitos = padronizar_cpf(cpf_gestor)
+    if df_cadastro.empty:
+        st.error("Base de cadastro indisponível.")
+        return
+
+    col_cpf = next((c for c in df_cadastro.columns if "cpf" in c.lower()), None)
+    col_senha_hash = next((c for c in df_cadastro.columns if "senha_hash" in c.lower()), None)
+    if col_cpf is None:
+        st.error("Planilha de cadastro sem coluna de CPF.")
+        return
+
+    registro = df_cadastro[
+        df_cadastro[col_cpf].apply(padronizar_cpf) == cpf_digitos
+    ]
+    if registro.empty:
+        registrar_falha_login()
+        st.error("CPF ou senha incorretos.")
+        return
+
+    hash_alvo = None
+    if col_senha_hash and registro.iloc[0].get(col_senha_hash):
+        hash_alvo = str(registro.iloc[0][col_senha_hash]).strip()
     else:
-        usuario = st.session_state.usuario_logado
-        cpf_k = usuario["CPF"]
-        pendente = st.session_state.banco_primeiro_acesso.get(cpf_k, usuario["Primeiro_Acesso_Original"])
-        
-        if pendente:
-            col_esp, col_form, col_esp2 = st.columns([1, 2, 1])
-            with col_form:
-                st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-                st.warning("Troca de senha obrigatória no primeiro acesso.")
-                n_senha = st.text_input("Nova Senha (Mín. 6 caracteres):", type="password")
-                c_senha = st.text_input("Confirmar Senha:", type="password")
-                
-                st.write("")
-                if st.button("Salvar e Acessar"):
-                    if len(n_senha) >= 6 and n_senha == c_senha and n_senha != "123":
-                        st.session_state.banco_senhas_customizadas[cpf_k] = criptografar_dado(n_senha)
-                        st.session_state.banco_primeiro_acesso[cpf_k] = False
-                        st.success("Credencial validada!")
-                        st.rerun()
-                    else:
-                        st.error("As senhas são inválidas ou não conferem.")
-                st.markdown("</div>", unsafe_allow_html=True)
-        else:
-            st.markdown(f"<h3 style='color: #0A2540; margin-bottom: 20px;'>Governança Cirúrgica | Olá, {usuario['Nome']}</h3>", unsafe_allow_html=True)
-            st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-            f_esp = st.selectbox("Filtrar Fila Eletiva por Especialidade:", ["Todas as Especialidades"] + list(df_fila["Especialidade"].unique()))
-            df_view = df_fila if f_esp == "Todas as Especialidades" else df_fila[df_fila["Especialidade"] == f_esp]
-            
-            st.dataframe(df_view, use_container_width=True, hide_index=True)
-            st.markdown("</div>", unsafe_allow_html=True)
+        hash_alvo = st.secrets.get("SENHA_INICIAL_HASH", "")  # bcrypt do padrão inicial
+
+    if hash_alvo and verificar_senha(senha_gestor, hash_alvo):
+        st.session_state.gestor = {"cpf": cpf_digitos}
+        st.session_state.tentativas_login = 0
+        st.rerun()
+    else:
+        registrar_falha_login()
+        st.error("CPF ou senha incorretos.")
+
+    renderizar_rodape()
+
+
+def tela_painel_gestor():
+    renderizar_cabecalho()
+    st.markdown("### 📊 Painel do Gestor")
+
+    df_fila, _ = carregar_bases()
+    fila = calcular_fila(df_fila)
+
+    if fila.empty:
+        st.info("Nenhum paciente com registro completo na fila no momento.")
+    else:
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total na fila", len(fila))
+        espec_counts = fila["Especialidade"].value_counts() if "Especialidade" in fila.columns else pd.Series()
+        col2.metric("Especialidades", len(espec_counts))
+        sem_exames = int(
+            (fila.get("Status_Exames_Lab", "").astype(str).str.strip().eq("Pendente")).sum()
+        )
+        col3.metric("Aguardando exames", sem_exames)
+
+        visivel = fila[
+            [
+                "Nome_Paciente", "CPF", "Especialidade", "Numero_AIH",
+                "Status_Exames_Lab", "Status_Exames_Imagem",
+                "Status_Avaliacao_Cardio", "Status_Avaliacao_PreAnestesica",
+                "Escore_Prioridade",
+            ]
+        ].copy()
+        visivel["CPF"] = visivel["CPF"].apply(
+            lambda c: f"***.{padronizar_cpf(c)[-6:-3]}.***-{padronizar_cpf(c)[-2:]}"
+            if padronizar_cpf(c) else "—"
+        )
+        st.dataframe(visivel, use_container_width=True, hide_index=True)
+
+    col_btn, _ = st.columns([1, 3])
+    with col_btn:
+        if st.button("Sair", key="btn_sair"):
+            limpar_sessao()
+            st.rerun()
+
+    renderizar_rodape()
+
+# ================================================================
+# ROTEAMENTO
+# ================================================================
+if "gestor" in st.session_state:
+    tela_painel_gestor()
+elif "dados_paciente" in st.session_state:
+    renderizar_resultado()
+else:
+    tela_consulta_paciente()
+    with st.container():
+        st.markdown("<div style='margin-top:40px; text-align:center;'>", unsafe_allow_html=True)
+        if st.button("Sou Gestor", key="btn_gestor"):
+            st.session_state.tela_gestor = True
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
