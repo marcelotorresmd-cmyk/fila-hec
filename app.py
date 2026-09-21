@@ -12,7 +12,6 @@ import bcrypt
 import gspread
 import pandas as pd
 import streamlit as st
-from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="Fila de Espera — HEC", page_icon="🏥", layout="wide")
 SHEET_FILA = st.secrets.get("SHEET_FILA_ID", "1d1X3vGQGdRA5Wpg3cnfKIYSXRiE6VC1XoCTn1XBcTj0")
@@ -67,12 +66,6 @@ def SAN(v):
     return html.escape(str(v if v not in (None, "") else "—"))
 
 
-def validar_cpf(cpf_d):
-    """Aceita qualquer CPF com 11 dígitos — a autenticação de fato
-    acontece na comparação com a planilha de cadastro."""
-    return len(cpf_d) == 11 and cpf_d != cpf_d[0] * 11
-
-
 def confere_senha(senha, hash_alvo):
     try:
         return bcrypt.checkpw(senha.encode(), str(hash_alvo).strip().encode())
@@ -96,7 +89,7 @@ def sai():
         st.session_state.pop(k, None)
 
 # ================================================================
-# ESCRITA NA PLANILHA (conta de serviço)
+# CONTA DE SERVIÇO (leitura + escrita nas planilhas)
 # ================================================================
 GC = None
 
@@ -115,6 +108,25 @@ def cliente_gdrive():
         except Exception:
             GC = None
     return GC
+
+
+def ler_via_gspread(sheet_id, aba, tem_header=True):
+    """Lê a planilha via conta de serviço. Retorna DataFrame."""
+    gc = cliente_gdrive()
+    if gc is None:
+        return pd.DataFrame()
+    try:
+        ws = gc.open_by_key(sheet_id).worksheet(aba)
+        valores = ws.get_all_values()
+        if not valores:
+            return pd.DataFrame()
+        if tem_header:
+            df = pd.DataFrame(valores[1:], columns=[c.strip() for c in valores[0]])
+        else:
+            df = pd.DataFrame(valores)
+        return df.dropna(how="all").reset_index(drop=True)
+    except Exception:
+        return pd.DataFrame()
 
 
 def gravar_senha_hash(cpf_d, hash_val):
@@ -164,17 +176,22 @@ def enviar_email(destino, assunto, corpo):
         return False
 
 # ================================================================
-# DADOS
+# DADOS — leitura pública (CSV) com fallback para conta de serviço
 # ================================================================
 @st.cache_data(ttl=30, show_spinner="Atualizando base...")
 def carregar():
     u = "https://docs.google.com/spreadsheets/d/{}/gviz/tq?tqx=out:csv&sheet={}"
-    # --- Fila HEC (tem cabeçalho) ---
+
+    # --- Fila HEC (com cabeçalho) ---
+    fila = pd.DataFrame()
     try:
         fila = pd.read_csv(u.format(SHEET_FILA, ABA_FILA), dtype=str)
         fila.columns = [c.strip() for c in fila.columns]
     except Exception:
         fila = pd.DataFrame()
+    if fila.empty:
+        fila = ler_via_gspread(SHEET_FILA, ABA_FILA, tem_header=True)
+
     if not fila.empty and {"Nome_Paciente", "CPF", "Cartao_SUS"}.issubset(fila.columns):
         fila = fila[fila["Nome_Paciente"].notna() & (fila["Nome_Paciente"].str.strip() != "")]
         fila = fila[fila["CPF"].notna() & (fila["CPF"].str.strip() != "")].copy()
@@ -184,27 +201,35 @@ def carregar():
         fila = fila.sort_values("Data").reset_index(drop=True)
 
     # --- Gestores (SEM cabeçalho: linha 1 já é dado) ---
+    cad = pd.DataFrame()
     try:
         cad_raw = pd.read_csv(u.format(SHEET_CAD, ABA_CAD), dtype=str, header=None)
+        cad = cad_raw if not cad_raw.empty else pd.DataFrame()
     except Exception:
-        cad_raw = pd.DataFrame()
-    if cad_raw.empty:
-        cad = pd.DataFrame(columns=["Nome", "CPF", "Email", "Senha_Hash"])
-    else:
-        primeira = [str(c).lower() if isinstance(c, str) else "" for c in cad_raw.iloc[0]]
-        tem_header = any(("cpf" in c) or ("email" in c) for c in primeira)
-        if tem_header:
-            cad = cad_raw.iloc[1:].reset_index(drop=True)
-            cad.columns = [str(c).strip() for c in cad_raw.iloc[0]]
+        cad = pd.DataFrame()
+    if cad.empty:
+        cad = ler_via_gspread(SHEET_CAD, ABA_CAD, tem_header=False)
+
+    if not cad.empty:
+        primeira = [str(c).lower() if isinstance(c, str) else "" for c in
+                    (cad.columns if list(cad.columns) and not str(cad.columns[0]).startswith("0") else cad.iloc[0])]
+        # Detecta se veio com nome de colunas (CSV público) ou sem (gspread)
+        colunas_sao_dados = all(("cpf" not in c) and ("email" not in c) and ("nome" not in c) for c in primeira)
+        if colunas_sao_dados:
+            cad = cad.copy()
         else:
-            cad = cad_raw.copy()
-            nomes = ["Nome", "CPF", "Email", "Senha_Hash"]
-            if len(cad.columns) <= len(nomes):
-                cad.columns = nomes[: len(cad.columns)]
-            else:
-                cad.columns = nomes + [f"Extra{i}" for i in range(len(cad.columns) - len(nomes))]
+            cad = cad.iloc[1:].reset_index(drop=True)
+            cad.columns = primeira
+        nomes = ["Nome", "CPF", "Email", "Senha_Hash"]
+        if len(cad.columns) <= len(nomes):
+            cad.columns = nomes[: len(cad.columns)]
+        else:
+            cad.columns = nomes + [f"Extra{i}" for i in range(len(cad.columns) - len(nomes))]
         cad = cad.dropna(how="all").reset_index(drop=True)
         cad["CPF_DIG"] = cad.get("CPF", pd.Series(dtype=str)).apply(DIG)
+    else:
+        cad = pd.DataFrame(columns=["Nome", "CPF", "Email", "Senha_Hash"])
+
     return fila, cad
 
 # ================================================================
@@ -387,7 +412,8 @@ def tela_login_gestor():
 
     estado, l = autenticar_gestor(cpf_d, g_senha)
     if estado == "erro_base":
-        st.error("Base de gestores indisponível. Verifique os Secrets e o compartilhamento da planilha.")
+        st.error("Base de gestores indisponível. Verifique o compartilhamento da planilha de cadastro "
+                 "com a conta de serviço (Editor) e o bloco gcp_service_account nos Secrets.")
         return
     if estado == "erro":
         falha_login()
