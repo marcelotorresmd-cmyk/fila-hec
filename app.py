@@ -17,6 +17,7 @@ st.set_page_config(page_title="Fila de Espera — HEC", page_icon="🏥", layout
 SHEET_FILA = st.secrets.get("SHEET_FILA_ID", "1d1X3vGQGdRA5Wpg3cnfKIYSXRiE6VC1XoCTn1XBcTj0")
 SHEET_CAD = st.secrets.get("SHEET_CADASTRO_ID", "1Ql2dIHQBPuqoLOpWrQlq26V8Y30c5xhmEzLaCMB9UnI")
 ABA_FILA, ABA_CAD = "Página1", "Página1"
+LIMITE_DIAS_CNJ = 180  # Enunciado nº 93 da Jornada de Direito da Saúde do CNJ
 
 # ================================================================
 # VISUAL
@@ -28,7 +29,7 @@ st.markdown("""
 html, body, .stApp { font-family:'Poppins',sans-serif !important; }
 h1,h2,h3,h4 { font-family:'Montserrat',sans-serif !important; }
 .stApp { background:var(--neutro) !important; color:var(--tinta) !important; }
-.main .block-container { max-width:1100px; padding:2rem 2.5rem 4rem; }
+.main .block-container { max-width:1200px; padding:2rem 2.5rem 4rem; }
 .bloco { background:#fff; border-radius:18px; padding:2rem 2.2rem;
   box-shadow:0 10px 34px rgba(35,50,86,.10); margin-bottom:1.4rem; }
 .hero { background:linear-gradient(120deg,var(--azul) 0%,var(--azul-escuro) 100%);
@@ -45,6 +46,8 @@ h1,h2,h3,h4 { font-family:'Montserrat',sans-serif !important; }
   -webkit-background-clip:text; background-clip:text; color:transparent; }
 .aviso { background:#fff; border-left:5px solid var(--rosa); padding:1.1rem 1.4rem;
   border-radius:12px; box-shadow:0 6px 18px rgba(35,50,86,.08); line-height:1.65; margin-bottom:1.2rem; font-size:.95rem; }
+.aviso-equidade { background:#fff; border-left:5px solid var(--azul); padding:1.1rem 1.4rem;
+  border-radius:12px; box-shadow:0 6px 18px rgba(35,50,86,.08); line-height:1.65; margin-bottom:1.2rem; font-size:.95rem; }
 .stButton>button, .stForm button { background:var(--azul) !important; color:#fff !important;
   border:none !important; border-radius:10px !important; font-weight:600 !important;
   padding:.55rem 1.4rem !important; box-shadow:0 4px 14px rgba(52,74,128,.25) !important; transition:all .2s ease !important; }
@@ -52,6 +55,7 @@ h1,h2,h3,h4 { font-family:'Montserrat',sans-serif !important; }
 input, .stTextInput input { border-radius:10px !important; }
 footer { visibility:hidden; }
 [data-testid="stMetricValue"] { color:var(--azul); font-family:'Montserrat',sans-serif; }
+.ref-legal { color:#6b7280; font-size:.8rem; margin-top:.6rem; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -89,7 +93,7 @@ def sai():
         st.session_state.pop(k, None)
 
 # ================================================================
-# CONTA DE SERVIÇO (leitura + escrita nas planilhas)
+# CONTA DE SERVIÇO
 # ================================================================
 GC = None
 
@@ -111,7 +115,6 @@ def cliente_gdrive():
 
 
 def ler_via_gspread(sheet_id, aba, tem_header=True):
-    """Lê a planilha via conta de serviço. Retorna DataFrame."""
     gc = cliente_gdrive()
     if gc is None:
         return pd.DataFrame()
@@ -130,7 +133,6 @@ def ler_via_gspread(sheet_id, aba, tem_header=True):
 
 
 def gravar_senha_hash(cpf_d, hash_val):
-    """Grava o hash na planilha de gestores (A=Nome, B=CPF, C=Email, D=Senha_Hash)."""
     gc = cliente_gdrive()
     if gc is None:
         return False
@@ -149,13 +151,25 @@ def gravar_senha_hash(cpf_d, hash_val):
                 ws.update_cell(1, col_hash, "Senha_Hash")
             start = 2
         else:
-            idx_cpf, col_hash, start = 1, 4, 1  # coluna B = CPF, coluna D = Senha_Hash
+            idx_cpf, col_hash, start = 1, 4, 1
         for i in range(start, len(valores) + 1):
             linha = valores[i - 1]
             if len(linha) > idx_cpf and DIG(linha[idx_cpf]) == cpf_d:
                 ws.update_cell(i, col_hash, hash_val)
                 return True
         return False
+    except Exception:
+        return False
+
+
+def cadastrar_gestor(nome, cpf_d, email):
+    gc = cliente_gdrive()
+    if gc is None:
+        return False
+    try:
+        ws = gc.open_by_key(SHEET_CAD).worksheet(ABA_CAD)
+        ws.append_row([nome, cpf_d, email], value_input_option="RAW")
+        return True
     except Exception:
         return False
 
@@ -176,7 +190,7 @@ def enviar_email(destino, assunto, corpo):
         return False
 
 # ================================================================
-# DADOS — leitura pública (CSV) com fallback para conta de serviço
+# DADOS
 # ================================================================
 @st.cache_data(ttl=30, show_spinner="Atualizando base...")
 def carregar():
@@ -198,6 +212,11 @@ def carregar():
         fila["CPF_DIG"] = fila["CPF"].apply(DIG)
         fila["SUS_DIG"] = fila["Cartao_SUS"].apply(DIG)
         fila["Data"] = pd.to_datetime(fila.get("Data_Cadastro_AIH"), dayfirst=True, errors="coerce")
+        fila["Dias_Espera"] = (pd.Timestamp.now().normalize() - fila["Data"]).dt.days
+        fila["Dias_Espera"] = fila["Dias_Espera"].where(fila["Dias_Espera"] >= 0)
+        if "Especialidade" not in fila.columns:
+            fila["Especialidade"] = "Não informada"
+        fila["Especialidade"] = fila["Especialidade"].fillna("Não informada").replace("", "Não informada")
         fila = fila.sort_values("Data").reset_index(drop=True)
 
     # --- Gestores (SEM cabeçalho: linha 1 já é dado) ---
@@ -213,7 +232,6 @@ def carregar():
     if not cad.empty:
         primeira = [str(c).lower() if isinstance(c, str) else "" for c in
                     (cad.columns if list(cad.columns) and not str(cad.columns[0]).startswith("0") else cad.iloc[0])]
-        # Detecta se veio com nome de colunas (CSV público) ou sem (gspread)
         colunas_sao_dados = all(("cpf" not in c) and ("email" not in c) and ("nome" not in c) for c in primeira)
         if colunas_sao_dados:
             cad = cad.copy()
@@ -246,7 +264,7 @@ def hero():
     )
 
 # ================================================================
-# PACIENTE
+# PACIENTE — sem dias de espera, sem prazos legais
 # ================================================================
 def tela_consulta():
     hero()
@@ -254,6 +272,21 @@ def tela_consulta():
         '<div class="aviso"><b>Fila atualizada automaticamente a cada 30 segundos.</b><br>'
         "Informe seu CPF e o número do Cartão Nacional de Saúde para localizar seu registro. "
         "Nenhum dado pessoal é armazenado nesta consulta.</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="aviso-equidade"><b>⚖️ Sobre o princípio da equidade</b><br>'
+        "A fila de espera é organizada conforme a ordem de entrada e os critérios clínicos de "
+        "prioridade definidos pelo SUS. Isso significa que cada paciente é avaliado conforme a "
+        "sua necessidade de saúde — pessoas com quadros mais graves ou urgentes podem ser "
+        "atendidas antes, sem prejuízo aos demais. É a garantia de um sistema <b>justo para todos</b>.</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="aviso"><b>📞 Mantenha seu telefone atualizado</b><br>'
+        "É pelo telefone cadastrado no hospital que avisamos sobre agendamentos, exames e "
+        "chamadas para cirurgia. Se trocou de número, atualize seus dados na central de "
+        "regulação para <b>não perder a sua vez</b>.</div>",
         unsafe_allow_html=True,
     )
     c_esq, c_dir = st.columns([1.1, 1])
@@ -328,15 +361,25 @@ def tela_resultado():
         "e desistências. Em caso de piora do quadro, procure o serviço de saúde mais próximo.</div>",
         unsafe_allow_html=True,
     )
+    st.markdown(
+        '<div class="aviso-equidade"><b>⚖️ Princípio da equidade:</b> a fila respeita critérios '
+        "clínicos do SUS — casos com maior necessidade podem ser priorizados, conforme avaliação "
+        "da equipe de saúde. Sua posição é acompanhada com isonomia e transparência.</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="aviso"><b>📞 Fique atento:</b> mantenha seu telefone atualizado no cadastro '
+        "do hospital — é por ele que avisaremos sobre a chamada para sua cirurgia.</div>",
+        unsafe_allow_html=True,
+    )
     if st.button("⬅ Nova Consulta"):
         sai()
         st.rerun()
 
 # ================================================================
-# GESTOR
+# GESTOR — LOGIN
 # ================================================================
 def autenticar_gestor(cpf_d, senha):
-    """Retorna (estado, linha). Estados: ok | temp | padrao | erro | erro_base."""
     _, cad = carregar()
     if cad.empty or "CPF_DIG" not in cad.columns:
         return "erro_base", None
@@ -457,33 +500,177 @@ def tela_troca_senha():
         g["forcar_troca"] = False
         st.rerun()
 
+# ================================================================
+# GESTOR — DASHBOARD RESPONSIVO A FILTROS
+# ================================================================
+COL_STATUS = {
+    "Exames laboratoriais": "Status_Exames_Lab",
+    "Exames de imagem": "Status_Exames_Imagem",
+    "Avaliação cardiológica": "Status_Avaliacao_Cardio",
+    "Pré-operatório": "Status_Avaliacao_PreAnestesica",
+}
+
+
+def aba_dashboard(fila):
+    st.markdown("#### 📈 Dashboard da fila de espera")
+
+    # ---- FILTROS (afetam métricas, gráficos e tabela abaixo) ----
+    f1, f2 = st.columns(2)
+    with f1:
+        f_esp = st.selectbox("Especialidade",
+                             ["Todas as especialidades"] + sorted(fila["Especialidade"].unique().tolist()))
+    with f2:
+        vals_pre = ["Todos"] + sorted(fila["Status_Avaliacao_PreAnestesica"].dropna().str.strip().unique().tolist())
+        f_pre = st.selectbox("Status do pré-operatório", vals_pre)
+
+    ff = fila.copy()
+    if f_esp != "Todas as especialidades":
+        ff = ff[ff["Especialidade"] == f_esp]
+    if f_pre != "Todos":
+        ff = ff[ff["Status_Avaliacao_PreAnestesica"].astype(str).str.strip() == f_pre]
+
+    if ff.empty:
+        st.info("Nenhum paciente encontrado com os filtros selecionados.")
+        return
+
+    # ---- MÉTRICAS (respondem aos filtros) ----
+    com_dias = ff.dropna(subset=["Dias_Espera"])
+    media = com_dias["Dias_Espera"].mean() if not com_dias.empty else None
+    acima = (com_dias["Dias_Espera"] > LIMITE_DIAS_CNJ).mean() * 100 if not com_dias.empty else None
+    pre_col = COL_STATUS["Pré-operatório"]
+    pre_concluido = int(ff[pre_col].astype(str).str.strip().str.lower().eq("concluído").sum())
+
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Pacientes", len(ff))
+    m2.metric("Tempo médio de espera", f"{media:.0f} dias" if media is not None else "—")
+    m3.metric(f"Acima de {LIMITE_DIAS_CNJ}d (Enun. 93 CNJ)", f"{acima:.0f}%" if acima is not None else "—")
+    m4.metric("Pré-op concluído", f"{pre_concluido}", f"{pre_concluido / len(ff) * 100:.0f}% da seleção")
+    maior = com_dias["Dias_Espera"].max() if not com_dias.empty else None
+    m5.metric("Maior espera", f"{int(maior)} dias" if pd.notna(maior) else "—")
+
+    st.markdown(" ")
+
+    # ---- GRÁFICOS (respondem aos filtros) ----
+    g1, g2 = st.columns(2)
+
+    with g1:
+        st.markdown("**Avaliações e exames — concluído × pendente**")
+        cont = {}
+        for rotulo, col in COL_STATUS.items():
+            s = ff[col].astype(str).str.strip().str.lower()
+            cont[f"✅ {rotulo}"] = int(s.eq("concluído").sum())
+            cont[f"⏳ {rotulo}"] = int(s.eq("pendente").sum())
+        st.bar_chart(pd.Series(cont).sort_values(ascending=False), use_container_width=True)
+
+    with g2:
+        st.markdown("**Distribuição por tempo de espera**")
+        if com_dias.empty:
+            st.info("Sem datas de cadastro válidas nesta seleção.")
+        else:
+            faixas = pd.cut(
+                com_dias["Dias_Espera"],
+                bins=[-1, 30, 90, LIMITE_DIAS_CNJ, 10000],
+                labels=["Até 30 dias", "31–90 dias", "91–180 dias", f"Mais de {LIMITE_DIAS_CNJ} dias"],
+            ).value_counts().reindex(
+                ["Até 30 dias", "31–90 dias", "91–180 dias", f"Mais de {LIMITE_DIAS_CNJ} dias"]
+            ).fillna(0)
+            st.bar_chart(faixas, use_container_width=True)
+
+    st.markdown("**Pacientes por especialidade** *(visão geral — todos os filtros de status, antes do filtro de especialidade)*")
+    base_graf = fila if f_pre == "Todos" else fila[fila["Status_Avaliacao_PreAnestesica"].astype(str).str.strip() == f_pre]
+    st.bar_chart(base_graf["Especialidade"].value_counts().sort_values(ascending=False), use_container_width=True)
+
+    # ---- RESUMO POR ESPECIALIDADE ----
+    st.markdown("**Resumo por especialidade**")
+    resumo = (base_graf.groupby("Especialidade")
+              .agg(Pacientes=("Nome_Paciente", "count"),
+                   Media_dias=("Dias_Espera", "mean"),
+                   Max_dias=("Dias_Espera", "max"))
+              .reset_index())
+    pre_ok = (base_graf.assign(ok=base_graf[pre_col].astype(str).str.strip().str.lower().eq("concluído"))
+              .groupby("Especialidade")["ok"].sum().rename("Pre_op_concluido"))
+    resumo = resumo.merge(pre_ok, on="Especialidade", how="left")
+    resumo["Media_dias"] = resumo["Media_dias"].round(0)
+    resumo = resumo.rename(columns={
+        "Especialidade": "Especialidade", "Pacientes": "Pacientes",
+        "Media_dias": "Média (dias)", "Max_dias": "Máx (dias)",
+        "Pre_op_concluido": "Pré-op concluído",
+    })
+    st.dataframe(resumo, use_container_width=True, hide_index=True)
+
+    # ---- TABELA DETALHADA (respondem aos filtros) ----
+    st.markdown(f"**Pacientes na seleção atual** ({len(ff)} registro(s) · {f_esp} · pré-op: {f_pre}) — ordenados da entrada mais antiga")
+    vis = ff[["Nome_Paciente", "Especialidade", "Dias_Espera", "Numero_AIH", "CID",
+              "Status_Exames_Lab", "Status_Exames_Imagem", "Status_Avaliacao_Cardio",
+              "Status_Avaliacao_PreAnestesica", "Escore_Prioridade"]].copy()
+    vis["Dias_Espera"] = vis["Dias_Espera"].apply(lambda v: int(v) if pd.notna(v) else None)
+    vis = vis.rename(columns={"Dias_Espera": "Dias de espera"})
+    st.dataframe(vis, use_container_width=True, hide_index=True, height=380)
+
+    st.download_button("⬇️ Baixar fila completa (CSV)",
+                       fila.drop(columns=["CPF_DIG", "SUS_DIG", "Data"], errors="ignore")
+                       .to_csv(index=False).encode("utf-8"),
+                       "fila_hec.csv", "text/csv")
+
+    st.markdown('<p class="ref-legal">Parâmetro de referência: Enunciado nº 93 da Jornada de Direito '
+                'da Saúde do CNJ — espera superior a 100 dias para consultas e exames e 180 dias para '
+                'cirurgias e tratamentos (redação da VI Jornada, 15/06/2023).</p>',
+                unsafe_allow_html=True)
+
+
+def aba_gestores():
+    st.markdown("#### 👥 Gestores do portal")
+    _, cad = carregar()
+    if not cad.empty:
+        lista = cad[["Nome", "CPF", "Email"]].copy()
+        lista["CPF"] = lista["CPF"].apply(
+            lambda c: f"{DIG(c)[:3]}.***.***-{DIG(c)[-2:]}" if len(DIG(c)) == 11 else "—"
+        )
+        st.dataframe(lista, use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhum gestor cadastrado.")
+
+    st.markdown("##### ➕ Cadastrar novo gestor")
+    st.caption("O novo gestor entra com a senha inicial padrão e será obrigado a criar a própria senha no primeiro acesso.")
+    with st.form("novo_gestor"):
+        n_nome = st.text_input("Nome completo")
+        n_cpf = st.text_input("CPF", placeholder="000.000.000-00")
+        n_email = st.text_input("E-mail (usado para 'Esqueci minha senha')")
+        salvar = st.form_submit_button("Cadastrar gestor", use_container_width=True)
+    if salvar:
+        cpf_d = DIG(n_cpf)
+        if not n_nome.strip():
+            st.error("Informe o nome.")
+        elif len(cpf_d) != 11:
+            st.error("Informe o CPF com 11 dígitos.")
+        elif "@" not in (n_email or ""):
+            st.error("Informe um e-mail válido.")
+        elif not cad.empty and cpf_d in cad["CPF_DIG"].values:
+            st.error("Já existe um gestor com este CPF.")
+        elif cadastrar_gestor(n_nome.strip(), cpf_d, n_email.strip()):
+            carregar.clear()
+            st.success(f"Gestor **{n_nome.strip()}** cadastrado! Ele já pode entrar com a senha inicial padrão.")
+        else:
+            st.error("Não foi possível gravar na planilha. Verifique o compartilhamento com a conta de serviço.")
+
 
 def tela_painel_gestor():
     g = st.session_state["gestor"]
     st.markdown(
         f'<div class="hero" style="padding:1.4rem 2rem;"><h1 style="font-size:1.25rem;">'
-        f"📊 Painel do Gestor — {g['nome']}</h1><p>Fila completa · atualizada a cada 30s</p></div>",
+        f"📊 Painel do Gestor — {g['nome']}</h1>"
+        f"<p>Fila completa · atualizada a cada 30s</p></div>",
         unsafe_allow_html=True,
     )
     fila, _ = carregar()
     if fila.empty:
         st.info("Nenhum paciente com registro completo na fila.")
     else:
-        pend = lambda col: int(fila.get(col, pd.Series(dtype=str)).astype(str).str.strip().eq("Pendente").sum())
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total na fila", len(fila))
-        c2.metric("Especialidades", fila["Especialidade"].nunique() if "Especialidade" in fila else 0)
-        c3.metric("Aguardando exames", pend("Status_Exames_Lab") + pend("Status_Exames_Imagem"))
-        c4.metric("Sem avaliação card.", pend("Status_Avaliacao_Cardio"))
-        vis = fila[["Nome_Paciente", "CPF", "Cartao_SUS", "Especialidade", "Numero_AIH", "CID",
-                    "Status_Exames_Lab", "Status_Exames_Imagem", "Status_Avaliacao_Cardio",
-                    "Status_Avaliacao_PreAnestesica", "Escore_Prioridade"]].copy()
-        vis["CPF"] = vis["CPF"].apply(lambda c: f"***.{DIG(c)[-6:-3]}.***-{DIG(c)[-2:]}" if DIG(c) else "—")
-        vis["Cartao_SUS"] = vis["Cartao_SUS"].apply(lambda c: "…" + DIG(c)[-4:] if DIG(c) else "—")
-        st.dataframe(vis, use_container_width=True, hide_index=True, height=430)
-        st.download_button("⬇️ Baixar fila completa (CSV)",
-                           fila.drop(columns=["CPF_DIG", "SUS_DIG", "Data"], errors="ignore")
-                           .to_csv(index=False).encode("utf-8"), "fila_hec.csv", "text/csv")
+        aba_dash, aba_gest = st.tabs(["📈 Dashboard da fila", "👥 Gestores"])
+        with aba_dash:
+            aba_dashboard(fila)
+        with aba_gest:
+            aba_gestores()
     c1, _ = st.columns([1, 4])
     with c1:
         if st.button("Sair", key="btn_sair"):
